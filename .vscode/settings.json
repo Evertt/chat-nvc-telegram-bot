@@ -1,0 +1,11 @@
+{
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "deno.enable": true,
+  "deno.lint": true,
+  "deno.unstable": true,
+  "[typescript]": {
+    "editor.defaultFormatter": "denoland.vscode-deno"
+  },
+  "js/ts.implicitProjectConfig.target": "ESNext",
+  "js/ts.implicitProjectConfig.checkJs": true,
+}
