@@ -1,5 +1,29 @@
 {
   "imports": {
-    "telegraf": "npm:telegraf@^4.12.2"
+    "telegraf": "https://ga.jspm.io/npm:telegraf@4.12.2/lib/index.js"
+  },
+  "scopes": {
+    "https://ga.jspm.io/": {
+      "abort-controller": "https://ga.jspm.io/npm:abort-controller@3.0.0/browser.js",
+      "buffer": "https://ga.jspm.io/npm:@jspm/core@2.0.1/nodelibs/browser/buffer.js",
+      "buffer-alloc": "https://ga.jspm.io/npm:buffer-alloc@1.2.0/index.js",
+      "buffer-alloc-unsafe": "https://ga.jspm.io/npm:buffer-alloc-unsafe@1.1.0/index.js",
+      "buffer-fill": "https://ga.jspm.io/npm:buffer-fill@1.0.0/index.js",
+      "crypto": "https://ga.jspm.io/npm:@jspm/core@2.0.1/nodelibs/browser/crypto.js",
+      "debug": "https://ga.jspm.io/npm:debug@4.3.4/src/browser.js",
+      "fs": "https://ga.jspm.io/npm:@jspm/core@2.0.1/nodelibs/browser/fs.js",
+      "http": "https://ga.jspm.io/npm:@jspm/core@2.0.1/nodelibs/browser/http.js",
+      "https": "https://ga.jspm.io/npm:@jspm/core@2.0.1/nodelibs/browser/https.js",
+      "ms": "https://ga.jspm.io/npm:ms@2.1.2/index.js",
+      "node-fetch": "https://ga.jspm.io/npm:node-fetch@2.6.9/browser.js",
+      "p-timeout": "https://ga.jspm.io/npm:p-timeout@4.1.0/index.js",
+      "path": "https://ga.jspm.io/npm:@jspm/core@2.0.1/nodelibs/browser/path.js",
+      "process": "https://ga.jspm.io/npm:@jspm/core@2.0.1/nodelibs/browser/process.js",
+      "safe-compare": "https://ga.jspm.io/npm:safe-compare@1.1.4/index.js",
+      "sandwich-stream": "https://ga.jspm.io/npm:sandwich-stream@2.0.2/dist/sandwich-stream.js",
+      "stream": "https://ga.jspm.io/npm:@jspm/core@2.0.1/nodelibs/browser/stream.js",
+      "url": "https://ga.jspm.io/npm:@jspm/core@2.0.1/nodelibs/browser/url.js",
+      "util": "https://ga.jspm.io/npm:@jspm/core@2.0.1/nodelibs/browser/util.js"
+    }
   }
 }
