@@ -1,6 +1,6 @@
 // import { Application } from "https://deno.land/x/oak@v12.1.0/mod.ts"
 import { config } from "https://deno.land/x/dotenv@v3.2.2/mod.ts"
-import { Telegraf } from "npm:telegraf@4"
+import { Telegraf } from "npm:telegraf@4.12.1"
 
 const {
   // OPENAI_KEY,
