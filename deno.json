@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "telegraf": "npm:telegraf@^4.12.2"
+  }
+}

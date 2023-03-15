@@ -1,7 +1,12 @@
 // import { Application } from "https://deno.land/x/oak@v12.1.0/mod.ts"
 import { config } from "https://deno.land/x/dotenv@v3.2.2/mod.ts"
-import { Telegraf } from "https://esm.sh/telegraf@4.12.2"
+// import { Telegraf } from "https://esm.sh/telegraf@4.12.2"
+// import { Telegraf } from "npm:telegraf@4.12.2"
+import { Telegraf } from "telegraf"
 
+console.log({ Telegraf })
+
+/*
 const {
   // OPENAI_KEY,
   TELEGRAM_KEY,
@@ -37,3 +42,4 @@ await bot.launch()
 // })
 
 // await app.listen({ port: 8000 })
+*/
