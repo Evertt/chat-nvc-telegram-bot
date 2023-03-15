@@ -2,7 +2,11 @@
 import { config } from "https://deno.land/x/dotenv@v3.2.2/mod.ts"
 // import { Telegraf } from "https://esm.sh/telegraf@4.12.2"
 // import { Telegraf } from "npm:telegraf@4.12.2"
-import { Telegraf } from "https://ga.jspm.io/npm:telegraf@4.12.2/lib/index.js"
+// import { Telegraf } from "https://ga.jspm.io/npm:telegraf@4.12.2/lib/index.js"
+import { Telegraf } from "telegraf"
+// import * as telegraf from "https://deno.land/x/telegraf@v4.12.2/src/index.ts"
+
+// const { Telegraf } = telegraf;
 
 const {
   // OPENAI_KEY,
@@ -20,7 +24,7 @@ const bot = new Telegraf(TELEGRAM_KEY)
 
 bot.telegram.deleteWebhook()
 
-bot.start((ctx: any) =>
+bot.start(ctx =>
   ctx.reply("Hey! I'm migrating to Deno, so at the moment I can't do anything anymore.")
 )
 
