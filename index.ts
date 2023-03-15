@@ -2,7 +2,7 @@
 import { config } from "https://deno.land/x/dotenv@v3.2.2/mod.ts"
 // import { Telegraf } from "https://esm.sh/telegraf@4.12.2"
 // import { Telegraf } from "npm:telegraf@4.12.2"
-import { Telegraf } from "telegraf"
+import { Telegraf } from "https://ga.jspm.io/npm:telegraf@4.12.2/lib/index.js"
 
 const {
   // OPENAI_KEY,
