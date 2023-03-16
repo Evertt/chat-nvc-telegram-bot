@@ -21,7 +21,7 @@ const bot = new Telegraf(TELEGRAM_KEY, {
 
 bot.start(async ctx => {
   await ctx.reply(`You said: "${ctx.message.text}".\n` +
-  "I'm under construction right now. I hope I'll be back soon-ish!")
+  "This is a test from google cloud run.")
 })
 
 const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
