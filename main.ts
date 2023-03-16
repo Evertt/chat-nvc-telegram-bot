@@ -6,7 +6,7 @@ const {
   TELEGRAM_KEY,
   TELEGRAM_WEBBOOK_TOKEN,
   DOMAIN = '',
-  MY_PORT,
+  PORT,
   // REDIS_USERNAME,
   // REDIS_PASSWORD,
 } = Deno.env.toObject()
@@ -27,7 +27,7 @@ bot.start(async ctx => {
 const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
   ? {
       domain: DOMAIN,
-      port: +MY_PORT,
+      port: +PORT,
       hookPath: '/',
       secretToken: TELEGRAM_WEBBOOK_TOKEN,
     }
