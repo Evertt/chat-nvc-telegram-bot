@@ -1,7 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 import "npm:redis@4.6.5"
 import ffmpeg from 'npm:fluent-ffmpeg@2.1.2'
-// import downloadFfmpegBinaries from "./download-ffmpeg-binaries.ts"
 
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 import { connect } from "https://deno.land/x/redis@v0.29.2/mod.ts"
@@ -20,18 +19,6 @@ import type {
 	CreateChatCompletionResponse,
 	ChatCompletionRequestMessage,
 } from 'npm:openai@3.2.1'
-
-// let pathToFfmpeg = '', pathToFFprobe = ''
-// downloadFfmpegBinaries().then(([ffmpeg, ffprobe]) => {
-//   ([pathToFfmpeg, pathToFFprobe] = [ffmpeg, ffprobe]);
-//   [ffmpeg, ffprobe].forEach(binary =>
-//     Deno.run({
-//       cmd: ['chmod', '+x', binary],
-//       stdout: 'piped',
-//       stderr: 'piped',
-//     }).status()
-//   )
-// })
 
 const {
   OPENAI_KEY,
@@ -327,15 +314,38 @@ bot.on(message('voice'), async ctx => {
 
 	const transcription = await transcriptionResponse.text()
 
+	await ctx.replyWithHTML(oneLine`
+		Thanks for sharing. I just want to share
+		my transcription of your voice message,
+		just so that you can check if I heard you correctly:
+	` + `<i>${transcription}</i>`)
+
+	const replyStub = await ctx.reply(oneLine`
+		Now I'm going to process what you said, give me a sec...
+	`)
+
 	await getReply(ctx.session.messages, ctx.from.first_name, transcription, 'voice')
-		.then(reply => ctx.replyWithHTML(reply))
+		.then(reply =>
+			ctx.telegram.editMessageText(
+				ctx.chat.id,
+				replyStub.message_id,
+				undefined,
+				reply,
+				{ parse_mode: 'HTML' }
+			)
+		)
 		.catch(error => {
 			console.log("Error:", error)
-	
-			ctx.reply(oneLine`
-				Something went wrong. It's possible that OpenAI's servers are overloaded.
-				Please try again in a few seconds or minutes. 🙏
-			`)
+
+			return ctx.telegram.editMessageText(
+				ctx.chat.id,
+				replyStub.message_id,
+				undefined,
+				oneLine`
+					Something went wrong. It's possible that OpenAI's servers are overloaded.
+					Please try again in a few seconds or minutes. 🙏
+				`,
+			)
 		})
 		.finally(stopTyping)
 })
