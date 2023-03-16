@@ -12,7 +12,6 @@ const htmlExplanation = stripIndent`
   <s>strikethrough</s>
   <tg-spoiler>spoiler</tg-spoiler>
   <a href="http://www.example.com/">inline URL</a>
-  <a href="tg://user?id=123456789">inline mention of a user</a>
   <code>inline fixed-width code</code>
   <pre>pre-formatted fixed-width code block</pre>
   <pre><code class="language-python">
