@@ -318,7 +318,7 @@ bot.on(message('voice'), async ctx => {
 		Thanks for sharing. I just want to share
 		my transcription of your voice message,
 		just so that you can check if I heard you correctly:
-	` + `<i>${transcription}</i>`)
+	` + `\n\n<i>${transcription}</i>`)
 
 	const replyStub = await ctx.reply(oneLine`
 		Now I'm going to process what you said, give me a sec...
