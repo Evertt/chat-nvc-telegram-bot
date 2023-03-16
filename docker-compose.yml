@@ -1,0 +1,9 @@
+version: '3'
+
+services:
+  web:
+    build: .
+    container_name: deno-chat-nvc-telegram-bot
+    image: deno-chat-nvc-telegram-bot-image
+    ports:
+      - "8080:8080"
