@@ -5,9 +5,13 @@ const {
   // OPENAI_KEY,
   TELEGRAM_KEY,
   TELEGRAM_WEBBOOK_TOKEN,
+  DOMAIN = '',
+  MY_PORT,
   // REDIS_USERNAME,
   // REDIS_PASSWORD,
 } = Deno.env.toObject()
+
+console.log("env", Deno.env.toObject())
 
 const bot = new Telegraf(TELEGRAM_KEY, {
   telegram: {
@@ -17,14 +21,16 @@ const bot = new Telegraf(TELEGRAM_KEY, {
 
 bot.start(async ctx => {
   await ctx.reply(`You said: "${ctx.message.text}".\n` +
-  "I'm under construction right now. I'll be back soon!")
+  "I'm under construction right now. I hope I'll be back soon-ish!")
 })
 
-bot.launch({
-  webhook: {
-    domain: "https://telegraf-bot.herokuapp.com",
-    hookPath: "/",
-    port: 8080,
-    secretToken: TELEGRAM_WEBBOOK_TOKEN,
-  },
-})
+const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
+  ? {
+      domain: DOMAIN,
+      port: +MY_PORT,
+      hookPath: '/',
+      secretToken: TELEGRAM_WEBBOOK_TOKEN,
+    }
+  : undefined
+
+await bot.launch({ webhook })

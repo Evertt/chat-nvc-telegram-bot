@@ -1,6 +1,7 @@
 FROM denoland/deno
 
-EXPOSE 8080
+ARG PORT
+EXPOSE ${PORT}
 
 WORKDIR /app
 

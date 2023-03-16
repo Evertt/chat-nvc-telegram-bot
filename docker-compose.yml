@@ -2,8 +2,12 @@ version: '3'
 
 services:
   web:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PORT: ${MY_PORT}
     container_name: deno-chat-nvc-telegram-bot
     image: deno-chat-nvc-telegram-bot-image
     ports:
-      - "8080:8080"
+      - "${MY_PORT}:${MY_PORT}"
