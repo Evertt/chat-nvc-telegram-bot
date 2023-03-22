@@ -18,6 +18,7 @@ bot.telegram.setMyCommands([
 	{ command: "start", description: "Start a new empathy session" },
 	{ command: "help", description: "See some extra information" },
 	{ command: "settings", description: "Change your settings" },
+	// { command: "asklocation", description: "Let me ask for your location" },
 ])
 
 bot.telegram.setChatMenuButton({

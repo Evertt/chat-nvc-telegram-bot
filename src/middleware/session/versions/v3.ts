@@ -14,12 +14,20 @@ type MySceneSessionData = Scenes.SceneSessionData & {
   settingsMessageId?: number
 }
 
-export interface Session extends
+type Location = {
+  latitude: number
+  longitude: number
+}
+
+interface SessionV3 extends
   NewSession<PrevSession>,
   Scenes.SceneSession<MySceneSessionData>
-  { }
+  {
+    location: Location | undefined
+    settings: Settings
+  }
 
-export class Session implements Session {
+export class Session implements SessionV3 {
   readonly version = 3
 
   messages: Message[] = []
@@ -32,12 +40,9 @@ export class Session implements Session {
     haveSpokenBefore: false
   }
 
-  __scenes: MySceneSessionData = {
-    current: undefined,
-    expires: undefined,
-    state: undefined,
-    settingsMessageId: undefined,
-  }
+  __scenes: MySceneSessionData = {}
+
+  location: Location | undefined
 
   migrate(prevSession: PrevSession) {
     this.messages = prevSession.messages

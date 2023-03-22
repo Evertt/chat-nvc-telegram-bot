@@ -3,7 +3,8 @@ import "https://deno.land/std@0.179.0/dotenv/load.ts"
 
 import { bot } from "./bot.ts"
 import { addMiddlewaresToBot } from "./middleware/add-all-to-bot.ts"
-import { addSettingsToBot } from "./bot/settings.ts"
+import { addScenesToBot } from "./scenes/add-all-to-bot.ts"
+import { SETTINGS_SCENE } from "./scenes/settings.ts"
 import type { Session } from "./middleware/session/session.ts"
 
 import { type Telegraf } from "npm:telegraf@4.12.2"
@@ -35,7 +36,7 @@ const {
 const BOT_NAME = "ChatNVC"
 
 addMiddlewaresToBot(bot)
-addSettingsToBot(bot)
+addScenesToBot(bot)
 
 bot.start(async ctx => {
 	console.log("start command")
@@ -78,6 +79,19 @@ bot.help(ctx => ctx.reply(oneLine`
 	You can make me forget our conversation by typing /start,
   in case you want to start fresh.
 `))
+
+bot.command("settings", ctx => ctx.scene.enter(SETTINGS_SCENE))
+
+// bot.command("asklocation", ctx => {
+// 	if (ctx.chat.type !== "private") return
+
+// 	return ctx.reply(
+// 		"Please share your location",
+// 		Markup.keyboard([
+// 			Markup.button.locationRequest("Share location"),
+// 		]).oneTime().resize(),
+// 	)
+// })
 
 const moderate = async (input: string) => {
 	const moderationRes = await fetch("https://api.openai.com/v1/moderations", {
@@ -268,6 +282,18 @@ bot.on(message("voice"), async ctx => {
 
 	console.log("Reply sent.")
 })
+
+// bot.on(message("location"), ctx => {
+// 	if (ctx.chat.type !== "private") return
+
+// 	const { latitude, longitude } = ctx.message.location
+
+// 	console.log({ latitude, longitude })
+
+// 	return ctx.reply(
+// 		"Thanks for sharing your location. I'll remember it for next time.",
+// 	)
+// })
 
 const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
   ? {

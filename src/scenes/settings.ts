@@ -3,8 +3,8 @@ import { Telegraf, Scenes, Markup } from "npm:telegraf@4.12.2"
 // @deno-types="npm:@types/common-tags@1.8.1"
 import { stripIndents, oneLine } from "npm:common-tags@1.8.1"
 
-const SETTINGS_SCENE = "SETTINGS"
-const settingsScene = new Scenes.BaseScene<MyContext>(SETTINGS_SCENE)
+export const SETTINGS_SCENE = "SETTINGS"
+export const settingsScene = new Scenes.BaseScene<MyContext>(SETTINGS_SCENE)
 
 type SettingsKeys = keyof MyContext["session"]["settings"]
 
