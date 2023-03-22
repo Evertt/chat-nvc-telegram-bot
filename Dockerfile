@@ -6,5 +6,5 @@ EXPOSE ${PORT}
 WORKDIR /app
 ADD . /app
 
-RUN deno cache main.ts
-CMD ["run", "-A", "--unstable", "main.ts"]
+RUN deno cache src/main.ts
+CMD ["run", "-A", "--unstable", "src/main.ts"]
