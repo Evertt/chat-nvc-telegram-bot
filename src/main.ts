@@ -30,6 +30,7 @@ const {
   TELEGRAM_WEBBOOK_TOKEN,
   DOMAIN = "",
   PORT,
+	PAYMENT_TOKEN = "",
 } = Deno.env.toObject()
 
 const BOT_NAME = "ChatNVC"
@@ -251,7 +252,8 @@ bot.on([message("text"), message("voice")], async ctx => {
 	)
 		.then(reply => {
 			const askForDonation =
-				ctx.session.settings.askForDonation !== false
+				PAYMENT_TOKEN
+				&& ctx.session.settings.askForDonation !== false
 				&& isBotAskingForDonation(reply)
 
 				return ctx.telegram.editMessageText(
