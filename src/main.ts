@@ -1,13 +1,11 @@
-// deno-lint-ignore-file no-explicit-any
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 
 import { bot } from "./bot.ts"
 import { addMiddlewaresToBot } from "./middleware/add-all-to-bot.ts"
 import { addScenesToBot } from "./scenes/add-all-to-bot.ts"
-import { SETTINGS_SCENE } from "./scenes/settings.ts"
 import type { Session } from "./middleware/session/session.ts"
 
-import { type Telegraf } from "npm:telegraf@4.12.2"
+import { type Telegraf, Markup } from "npm:telegraf@4.12.2"
 import { getTokens } from "./tokenizer.ts"
 
 import { getTranscription } from "./audio-transcriber.ts"
@@ -23,6 +21,7 @@ import type {
 	CreateChatCompletionResponse,
 	ChatCompletionRequestMessage,
 } from "npm:openai@3.2.1"
+import { isBotAskingForDonation } from "./donations.ts";
 
 type Message = Session["messages"][number]
 
@@ -36,6 +35,7 @@ const {
 const BOT_NAME = "ChatNVC"
 
 addMiddlewaresToBot(bot)
+
 addScenesToBot(bot)
 
 bot.start(async ctx => {
@@ -78,20 +78,26 @@ bot.help(ctx => ctx.reply(oneLine`
 	I'm ChatNVC, a bot that tries to listen to you empathically.
 	You can make me forget our conversation by typing /start,
   in case you want to start fresh.
+	I also just want to mention that it does cost money to keep me running,
+	so I'm basically able to run based on donations.
+	So if you'd like to contribute, so that I can keep offering empathy to people,
+	you can do so by typing /donate.
 `))
 
-bot.command("settings", ctx => ctx.scene.enter(SETTINGS_SCENE))
+bot.command("donate", async ctx => {
+	if (ctx.chat.type !== "private") return
 
-// bot.command("asklocation", ctx => {
-// 	if (ctx.chat.type !== "private") return
-
-// 	return ctx.reply(
-// 		"Please share your location",
-// 		Markup.keyboard([
-// 			Markup.button.locationRequest("Share location"),
-// 		]).oneTime().resize(),
-// 	)
-// })
+	await ctx.reply(oneLine`
+		Oh, you want to donate to me? Thank you, I really appreciate that!
+		Choose any of the options below to donate. And really, thank you! 🙏
+	`, Markup.inlineKeyboard([
+		[
+			Markup.button.callback("$1", "donate_1"),
+			Markup.button.callback("$2", "donate_2"),
+			Markup.button.callback("$4", "donate_4"),
+		]
+	]))
+})
 
 const moderate = async (input: string) => {
 	const moderationRes = await fetch("https://api.openai.com/v1/moderations", {
@@ -117,7 +123,7 @@ const moderate = async (input: string) => {
 	return false
 }
 
-const getReply = async (messages: Message[], name: string, text: string, type: "text" | "voice") => {
+const getReply = async (messages: Message[], name: string, text: string, type: "text" | "voice", askForDonation: boolean) => {
 	console.log("Generating reply")
 
 	let moderationResult = await moderate(text)
@@ -137,10 +143,13 @@ const getReply = async (messages: Message[], name: string, text: string, type: "
 		{ role: msg.name === BOT_NAME ? "assistant" : "user", content: msg.message }
 	))
 
-	const systemPrompt = getSystemPrompt({
-		request: "empathy",
-		names: [name],
-	})
+	const systemPrompt = getSystemPrompt(
+		{
+			request: "empathy",
+			names: [name],
+		},
+		askForDonation,
+	)
 
 	chatMessages.unshift({ role: "system", content: systemPrompt })
 
@@ -204,7 +213,7 @@ const getReply = async (messages: Message[], name: string, text: string, type: "
 	return assistantResponse
 }
 
-bot.on(message("text"), async ctx => {
+bot.on([message("text"), message("voice")], async ctx => {
 	if (ctx.chat.type !== "private") return
 
 	const stopTyping = repeat(
@@ -212,63 +221,58 @@ bot.on(message("text"), async ctx => {
 		5100
 	)
 
-	const handleError = (error: any) => {
-		console.log("Reply error:", error)
-	
-		ctx.reply(OPENAI_OVERLOADED_MESSAGE)
+	let text = ''
+
+	if ("text" in ctx.message) {
+		text = ctx.message.text
+	} else if ("voice" in ctx.message) {
+		const { file_id } = ctx.message.voice
+		const fileLink = await ctx.telegram.getFileLink(file_id)
+		text = await getTranscription(fileLink)
+
+		if (ctx.session.settings.receiveVoiceTranscriptions)
+			await ctx.replyWithHTML(oneLine`
+				Thanks for sharing. I just want to share
+				my transcription of your voice message,
+				just so that you can check if I heard you correctly:
+			` + `\n\n<i>${text}</i>`)
 	}
 
-	await getReply(
-		ctx.session.messages,
-		ctx.from.first_name,
-		ctx.message.text,
-		"text"
-	)
-		.then(reply => ctx.replyWithHTML(reply))
-    .catch(handleError)
-    .finally(stopTyping)
-
-	console.log("Reply sent.")
-})
-
-bot.on(message("voice"), async ctx => {
-	if (ctx.chat.type !== "private") return
-
-	const stopTyping = repeat(
-		() => ctx.sendChatAction("typing"),
-		5100
-	)
-
-	const voiceLink = await ctx.telegram.getFileLink(ctx.message.voice.file_id)
-  const transcription = await getTranscription(voiceLink);
-
-	if (ctx.session.settings.receiveVoiceTranscriptions)
-		await ctx.replyWithHTML(oneLine`
-			Thanks for sharing. I just want to share
-			my transcription of your voice message,
-			just so that you can check if I heard you correctly:
-		` + `\n\n<i>${transcription}</i>`)
-
-	const replyStub = await ctx.reply(oneLine`
-		I'll need a moment to process what you said, please wait 🙏
+	const replyStub = await ctx.replyWithHTML(oneLine`
+		<i>I'll need a moment to process what you said, please wait...</i> 🙏
 	`)
 
 	await getReply(
 		ctx.session.messages,
 		ctx.from.first_name,
-		transcription,
-		"voice"
+		text,
+		"text" in ctx.message ? "text" : "voice",
+		ctx.session.settings.askForDonation !== false
 	)
-		.then(reply =>
-			ctx.telegram.editMessageText(
-				ctx.chat.id,
-				replyStub.message_id,
-				undefined,
-				reply,
-				{ parse_mode: "HTML" }
-			)
-		)
-		.catch(error => {
+		.then(reply => {
+			const askForDonation =
+				ctx.session.settings.askForDonation !== false
+				&& isBotAskingForDonation(reply)
+
+				return ctx.telegram.editMessageText(
+					ctx.chat.id,
+					replyStub.message_id,
+					undefined,
+					reply,
+					!askForDonation ? {} : Markup.inlineKeyboard([
+						[
+							Markup.button.callback("No, I don't want to donate right now.", "no_donation"),
+							Markup.button.callback("No, and please don't ask me again.", "never_donation"),
+						],
+						[
+							Markup.button.callback("$1", "donate_1"),
+							Markup.button.callback("$2", "donate_2"),
+							Markup.button.callback("$4", "donate_4"),
+						]
+					])
+				)
+		})
+    .catch(error => {
 			console.log("Error:", error)
 
 			return ctx.telegram.editMessageText(
@@ -278,22 +282,35 @@ bot.on(message("voice"), async ctx => {
 				OPENAI_OVERLOADED_MESSAGE,
 			)
 		})
-		.finally(stopTyping)
+    .finally(stopTyping)
 
 	console.log("Reply sent.")
 })
 
-// bot.on(message("location"), ctx => {
-// 	if (ctx.chat.type !== "private") return
+bot.action("no_donation", ctx =>
+	ctx.editMessageText(oneLine`
+		Thank you for taking care of yourself, I sincerely appreciate it.
+		You are always welcome to ask for more empathy whenever you need it.
+		You can always change your mind by typing /donate.
+	`
+))
 
-// 	const { latitude, longitude } = ctx.message.location
+bot.action("never_donation", async ctx => {
+	ctx.session.settings.askForDonation = false
+	await ctx.editMessageText(oneLine`
+		Thank you for taking care of yourself, I sincerely appreciate it.
+		You are always welcome to ask for more empathy whenever you need it.
+	`)
+})
 
-// 	console.log({ latitude, longitude })
-
-// 	return ctx.reply(
-// 		"Thanks for sharing your location. I'll remember it for next time.",
-// 	)
-// })
+bot.action(/donate_(\d+)/, async ctx => {
+	const donationAmount = parseInt(ctx.match[1])
+	await ctx.answerCbQuery(`Thank you for your donation of $${donationAmount}!`)
+	await ctx.editMessageText(oneLine`
+		Thank you for your donation of $${donationAmount}!
+		You are always welcome to ask for more empathy whenever you need it.
+	`)
+})
 
 const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
   ? {
@@ -315,4 +332,5 @@ Deno.addSignalListener("SIGTERM", () => {
   Deno.exit()
 })
 
+console.log("Starting bot...")
 await bot.launch({ webhook })

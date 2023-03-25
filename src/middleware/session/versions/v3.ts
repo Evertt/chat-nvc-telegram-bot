@@ -8,6 +8,7 @@ export type MetaData = {
 
 export type Settings = {
   receiveVoiceTranscriptions: boolean
+  askForDonation?: boolean
 }
 
 type MySceneSessionData = Scenes.SceneSessionData & {
@@ -33,7 +34,7 @@ export class Session implements SessionV3 {
   messages: Message[] = []
 
   settings: Settings = {
-    receiveVoiceTranscriptions: false
+    receiveVoiceTranscriptions: false,
   }
 
   metaData: MetaData = {

@@ -15,9 +15,10 @@ export const bot = new Telegraf<MyContext>(TELEGRAM_KEY, {
 })
 
 bot.telegram.setMyCommands([
-	{ command: "start", description: "Start a new empathy session" },
+	{ command: "start", description: "Clear my memory, start with a brand new empathy session" },
 	{ command: "help", description: "See some extra information" },
-	{ command: "settings", description: "Change your settings" },
+	{ command: "settings", description: "View and change your settings" },
+	{ command: "donate", description: "Donate to me" },
 	// { command: "asklocation", description: "Let me ask for your location" },
 ])
 
