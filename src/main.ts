@@ -39,6 +39,8 @@ addMiddlewaresToBot(bot)
 
 addScenesToBot(bot)
 
+const me = await bot.telegram.getMe()
+
 bot.start(async ctx => {
 	console.log("start command")
 
@@ -124,7 +126,7 @@ const moderate = async (input: string) => {
 	return false
 }
 
-const getReply = async (messages: Message[], name: string, text: string, type: "text" | "voice", askForDonation: boolean) => {
+const getReply = async (messages: Message[], name: string, text: string, type: "text" | "voice", askForDonation: boolean, request: "empathy" | "mediation" | "translation" = "empathy") => {
 	console.log("Generating reply")
 
 	let moderationResult = await moderate(text)
@@ -141,12 +143,12 @@ const getReply = async (messages: Message[], name: string, text: string, type: "
 	})
 	
 	const chatMessages: ChatCompletionRequestMessage[] = messages.map(msg => (
-		{ role: msg.name === BOT_NAME ? "assistant" : "user", content: msg.message }
+		{ role: /chatnvc/i.test(msg.name) ? "assistant" : "user", content: `${msg.name === BOT_NAME ? '' : msg.name + ": "}${msg.message}` }
 	))
 
 	const systemPrompt = getSystemPrompt(
 		{
-			request: "empathy",
+			request,
 			names: [name],
 		},
 		askForDonation,
@@ -189,7 +191,7 @@ const getReply = async (messages: Message[], name: string, text: string, type: "
 
 	const completionResponse: CreateChatCompletionResponse = await chatResponse.json()
 	
-	const assistantResponse = completionResponse.choices[0]?.message?.content ?? ""
+	let assistantResponse = completionResponse.choices[0]?.message?.content ?? ""
 
 	if (assistantResponse === "") {
 		throw new Error("OpenAI returned an empty response")
@@ -204,6 +206,9 @@ const getReply = async (messages: Message[], name: string, text: string, type: "
 		Thank you. 🙏
 	`
 
+	assistantResponse = assistantResponse
+		.replace(/^chatnvc\w*: /i, "")
+
 	messages.push({
 		type: "text",
 		name: BOT_NAME,
@@ -215,12 +220,7 @@ const getReply = async (messages: Message[], name: string, text: string, type: "
 }
 
 bot.on([message("text"), message("voice")], async ctx => {
-	if (ctx.chat.type !== "private") return
-
-	const stopTyping = repeat(
-		() => ctx.sendChatAction("typing"),
-		5100
-	)
+	if (ctx.chat.type === "supergroup") return
 
 	let text = ''
 
@@ -229,9 +229,9 @@ bot.on([message("text"), message("voice")], async ctx => {
 	} else if ("voice" in ctx.message) {
 		const { file_id } = ctx.message.voice
 		const fileLink = await ctx.telegram.getFileLink(file_id)
-		text = await getTranscription(fileLink)
+		text = await getTranscription(fileLink as URL)
 
-		if (ctx.session.settings.receiveVoiceTranscriptions)
+		if (ctx.session.settings.receiveVoiceTranscriptions && ctx.chat.type === "private")
 			await ctx.replyWithHTML(oneLine`
 				Thanks for sharing. I just want to share
 				my transcription of your voice message,
@@ -239,9 +239,70 @@ bot.on([message("text"), message("voice")], async ctx => {
 			` + `\n\n<i>${text}</i>`)
 	}
 
+	if (ctx.chat.type === "group") {
+		const wasMentioned = "text" in ctx.message
+			? ctx.message.text.includes(`@${ctx.me}`)
+			: text.includes(BOT_NAME)
+
+		const reply = ctx.message.reply_to_message
+		const messages: Message[] = []
+
+		if (!reply) {
+			// do nothing
+		} else if ("text" in reply) {
+			messages.push({
+				type: "text",
+				name: reply.from!.first_name,
+				message: reply.text,
+				date: new Date(reply.date).toString()
+			})
+		} else if ("voice" in reply) {
+			const { file_id } = reply.voice
+			const fileLink = await ctx.telegram.getFileLink(file_id)
+			const transcription = await getTranscription(fileLink as URL)
+
+			messages.push({
+				type: "voice",
+				name: reply.from!.first_name,
+				message: transcription,
+				date: new Date(reply.date).toString()
+			})
+		}
+
+		if (!wasMentioned) {
+			if (!reply) return void (console.log("and there was no reply either"))
+			if (reply.from!.id !== me.id) return
+		}
+
+		const stopTyping = repeat(
+			() => ctx.sendChatAction("typing"),
+			5100
+		)
+
+		return getReply(
+			messages,
+			ctx.from.first_name,
+			text,
+			"text" in ctx.message ? "text" : "voice",
+			false,
+			"translation",
+		)
+		.then(reply => ctx.reply(reply, { reply_to_message_id: ctx.message.message_id }))
+		.catch(error => {
+			console.error(error)
+			return ctx.reply(OPENAI_OVERLOADED_MESSAGE)
+		})
+		.finally(stopTyping)
+	}
+
 	const replyStub = await ctx.replyWithHTML(oneLine`
 		<i>I'll need a moment to process what you said, please wait...</i> 🙏
 	`)
+
+	const stopTyping = repeat(
+		() => ctx.sendChatAction("typing"),
+		5100
+	)
 
 	await getReply(
 		ctx.session.messages,

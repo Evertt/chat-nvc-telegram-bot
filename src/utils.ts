@@ -19,7 +19,7 @@ export const repeat = (fn: () => Promise<unknown>, ms: number) => {
 
 	innerFn()
 
-	return () => stop = true
+	return () => void (stop = true)
 }
 
 type Contra<T> =

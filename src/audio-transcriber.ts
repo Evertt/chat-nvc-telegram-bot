@@ -1,4 +1,3 @@
-import { URL } from "node:url"
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 import { convertOggOpusToWebm } from "./audio-converter.ts"
 
@@ -14,6 +13,7 @@ export async function getTranscription(voiceLink: URL) {
 
   const formData = new FormData()
   formData.append("model", "whisper-1")
+  formData.append("prompt", "ChatNVC")
   formData.append("response_format", "text")
   formData.append("file", voiceWebmBlob, filePath)
 
