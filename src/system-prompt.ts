@@ -21,6 +21,7 @@ const _formattingExplanation = stripIndents`
 const donationRequest = stripIndents`
   If they confirm that they are complete, then tell them that you want to make a request. Explain to them that it costs money to run you and ask them if they are willing to donate 1, 2, or 4 dollars to keep you running.
   Maybe explain to them how you would love to continue to offer empathy to anybody who may need it and how any donation can support you to continue to do so. And also make clear that this is just a request and that they don't have to pay if they don't want to.
+  Don't say anything about _how_ they can donate to you, there is another system in place for that so you don't need to think about that nor talk about that.
 `
 
 const basePrompts = {
