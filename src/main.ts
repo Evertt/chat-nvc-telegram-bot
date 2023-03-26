@@ -265,12 +265,12 @@ const getReply = async (messages: Message[], name: string, text: string, type: "
 	assistantResponse = assistantResponse
 		.replace(/^chatnvc\w*: /i, "")
 
-	messages.push({
-		type: "text",
-		name: BOT_NAME,
-		message: assistantResponse,
-		date: Date(),
-	})
+	// messages.push({
+	// 	type: "text",
+	// 	name: BOT_NAME,
+	// 	message: assistantResponse,
+	// 	date: Date(),
+	// })
 
 	return assistantResponse
 }
@@ -399,6 +399,13 @@ bot.on([message("text"), message("voice")], async ctx => {
 		ctx.session.settings.askForDonation !== false
 	)
 		.then(reply => {
+			ctx.session.messages.push({
+				type: "text",
+				name: BOT_NAME,
+				message: reply,
+				date: Date(),
+			})
+
 			const askForDonation =
 				PAYMENT_TOKEN
 				&& ctx.session.settings.askForDonation !== false
