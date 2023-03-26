@@ -196,7 +196,7 @@ const addNewCheckPointIfNeeded = (messages: Message[], excludeNames = false, req
 }
 
 const getReply = async (messages: Message[], name: string, text: string, type: "text" | "voice", askForDonation: boolean, request: IntroData["request"] = "empathy") => {
-	console.log("Generating reply")
+	// console.log("Generating reply")
 
 	let moderationResult = await moderate(text)
 	if (moderationResult) return oneLineCommaListsAnd`
@@ -277,8 +277,6 @@ const getReply = async (messages: Message[], name: string, text: string, type: "
 
 bot.on([message("text"), message("voice")], async ctx => {
 	if (ctx.chat.type === "supergroup") return
-	console.log(ctx.from.first_name)
-	console.log(`telegraf-test:${ctx.from!.id}:${ctx.chat.id}`)
 
 	let text = ''
 
@@ -339,7 +337,7 @@ bot.on([message("text"), message("voice")], async ctx => {
 		}
 
 		if (!wasMentioned) {
-			if (!reply) return void (console.log("and there was no reply either"))
+			if (!reply) return // void (console.log("and there was no reply either"))
 			if (reply.from?.id !== me.id) return
 		}
 
@@ -436,7 +434,7 @@ bot.on([message("text"), message("voice")], async ctx => {
 		})
     .finally(stopTyping)
 
-	console.log("Reply sent.")
+	// console.log("Reply sent.")
 })
 
 bot.action("no_donation", ctx =>
