@@ -14,7 +14,7 @@ import { OPENAI_OVERLOADED_MESSAGE } from "./error-messages.ts"
 // @deno-types="npm:@types/common-tags@1.8.1"
 import { oneLine, oneLineCommaListsAnd, stripIndents } from "npm:common-tags@1.8.1"
 import { message } from "npm:telegraf@4.12.2/filters"
-import { getSystemPrompt } from "./system-prompt.ts"
+import { IntroData, getSystemPrompt } from "./system-prompt.ts"
 import type {
 	CreateModerationResponse,
 	CreateChatCompletionRequest,
@@ -126,7 +126,76 @@ const moderate = async (input: string) => {
 	return false
 }
 
-const getReply = async (messages: Message[], name: string, text: string, type: "text" | "voice", askForDonation: boolean, request: "empathy" | "mediation" | "translation" = "empathy") => {
+const summarize = async (messages: ChatCompletionRequestMessage[]) => {
+	const lastMessage = messages.pop()!
+
+	messages.push({
+		role: "system",
+		content: oneLine`
+			Please summarize the observations, feelings, needs,
+			and possibly requests that the other person
+			(or people, if there were more than one) had in the conversation.
+			If there were any valuable insights in the conversation,
+			you can include those too in the summary.
+		`
+	})
+
+	console.log("Trying to get a summary")
+	const assistantResp = await getAssistantResponse(messages)
+	const summaryMessage = assistantResp.choices[0].message
+	console.log("Got a summary:", summaryMessage?.content)
+
+	if (!summaryMessage) throw new Error("No summary message returned")
+
+	messages.splice(1, Infinity, summaryMessage, lastMessage)
+}
+
+const needsNewCheckPoint = (messages: Message[], excludeNames: boolean, request: IntroData["request"] = "translation") => {
+	const chatMessages: ChatCompletionRequestMessage[] = messages.map(msg => (
+		{ role: /chatnvc/i.test(msg.name) ? "assistant" : "user", content: `${excludeNames || msg.name === BOT_NAME ? '' : msg.name + ": "}${msg.message}` }
+	))
+
+	const names = new Set(messages.map(msg => msg.name))
+	names.delete(BOT_NAME)
+
+	const systemPrompt = getSystemPrompt(
+		{
+			request,
+			names: [...names],
+		},
+		false,
+	)
+
+	chatMessages.unshift({ role: "system", content: systemPrompt })
+
+	const tokenCount = chatMessages.reduce(
+		(tokenCount, msg) => tokenCount + getTokens(msg.content),
+		0
+	)
+
+	return [tokenCount > 3750, chatMessages] as const
+}
+
+const addNewCheckPointIfNeeded = (messages: Message[], excludeNames = false, request: IntroData["request"] = "translation") => {
+	const [needsNewCheckpoint, chatMessages] = needsNewCheckPoint(messages, excludeNames, request)
+
+	if (!needsNewCheckpoint) return
+
+	summarize(chatMessages)
+	const lastMessage = messages.pop()!
+
+	const summaryMessage: Message = {
+		type: "text",
+		name: BOT_NAME,
+		message: chatMessages[1].content,
+		date: Date(),
+		checkpoint: true,
+	}
+
+	messages.push(summaryMessage, lastMessage)
+}
+
+const getReply = async (messages: Message[], name: string, text: string, type: "text" | "voice", askForDonation: boolean, request: IntroData["request"] = "empathy") => {
 	console.log("Generating reply")
 
 	let moderationResult = await moderate(text)
@@ -161,35 +230,22 @@ const getReply = async (messages: Message[], name: string, text: string, type: "
 		0
 	)
 
-	if (tokenCount >= 4000) {
-		return oneLine`
-			This conversation has become too long for me to be able to process it.
-			In the future I will add a button with which you can order me to summarize the conversation.
-			For now, what you can do is to wipe my memory by typing /start.
-		`
+	if (tokenCount > 3750) {
+		summarize(chatMessages)
+
+		const lastMessage = messages.pop()!
+		const summaryMessage: Message = {
+			type: "text",
+			name: BOT_NAME,
+			message: chatMessages[1].content,
+			date: Date(),
+			checkpoint: true,
+		}
+
+		messages.push(summaryMessage, lastMessage)
 	}
 
-	const chatRequestOpts: CreateChatCompletionRequest = {
-		model: "gpt-3.5-turbo",
-		temperature: 0.9,
-		messages: chatMessages,
-	}
-
-	const chatResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-		headers: {
-			Authorization: `Bearer ${OPENAI_KEY}`,
-			"Content-Type": "application/json"
-		},
-		method: "POST",
-		body: JSON.stringify(chatRequestOpts)
-	})
-
-	if (!chatResponse.ok) {
-		const err = await chatResponse.text()
-		throw new Error(err)
-	}
-
-	const completionResponse: CreateChatCompletionResponse = await chatResponse.json()
+	const completionResponse: CreateChatCompletionResponse = await getAssistantResponse(chatMessages);
 	
 	let assistantResponse = completionResponse.choices[0]?.message?.content ?? ""
 
@@ -221,6 +277,8 @@ const getReply = async (messages: Message[], name: string, text: string, type: "
 
 bot.on([message("text"), message("voice")], async ctx => {
 	if (ctx.chat.type === "supergroup") return
+	console.log(ctx.from.first_name)
+	console.log(`telegraf-test:${ctx.from!.id}:${ctx.chat.id}`)
 
 	let text = ''
 
@@ -239,15 +297,26 @@ bot.on([message("text"), message("voice")], async ctx => {
 			` + `\n\n<i>${text}</i>`)
 	}
 
+	if (ctx.chat.type === "private" || ctx.session.settings.storeMessagesInGroups) {
+		ctx.session.messages.push({
+			type: "text" in ctx.message ? "text" : "voice",
+			name: ctx.from.first_name,
+			message: text,
+			date: Date(),
+		})
+
+		addNewCheckPointIfNeeded(ctx.session.messages, ctx.chat.type === "private")
+	}
+
 	if (ctx.chat.type === "group") {
 		const wasMentioned = "text" in ctx.message
 			? ctx.message.text.includes(`@${ctx.me}`)
 			: text.includes(BOT_NAME)
 
 		const reply = ctx.message.reply_to_message
-		const messages: Message[] = []
+		const messages = [ ...ctx.session.messagesFromLastCheckpoint ]
 
-		if (!reply) {
+		if (!reply || ctx.session.settings.storeMessagesInGroups) {
 			// do nothing
 		} else if ("text" in reply) {
 			messages.push({
@@ -271,7 +340,16 @@ bot.on([message("text"), message("voice")], async ctx => {
 
 		if (!wasMentioned) {
 			if (!reply) return void (console.log("and there was no reply either"))
-			if (reply.from!.id !== me.id) return
+			if (reply.from?.id !== me.id) return
+		}
+
+		if (text.includes("/keep_track")) {
+			ctx.session.settings.storeMessagesInGroups = true
+
+			return ctx.reply(oneLine`
+				Okay, I'll keep track of all messages in this group from now on.
+				So that I can hopefully offer better empathy when asked.
+			`)
 		}
 
 		const stopTyping = repeat(
@@ -305,7 +383,7 @@ bot.on([message("text"), message("voice")], async ctx => {
 	)
 
 	await getReply(
-		ctx.session.messages,
+		ctx.session.messagesFromLastCheckpoint,
 		ctx.from.first_name,
 		text,
 		"text" in ctx.message ? "text" : "voice",
@@ -397,3 +475,27 @@ Deno.addSignalListener("SIGTERM", () => {
 
 console.log("Starting bot...")
 await bot.launch({ webhook })
+
+async function getAssistantResponse(chatMessages: ChatCompletionRequestMessage[]) {
+  const chatRequestOpts: CreateChatCompletionRequest = {
+    model: "gpt-3.5-turbo",
+    temperature: 0.9,
+    messages: chatMessages,
+  };
+
+  const chatResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+    headers: {
+      Authorization: `Bearer ${OPENAI_KEY}`,
+      "Content-Type": "application/json"
+    },
+    method: "POST",
+    body: JSON.stringify(chatRequestOpts)
+  })
+
+  if(!chatResponse.ok) {
+    const err = await chatResponse.text()
+    throw new Error(err)
+  }
+
+  return await chatResponse.json() as CreateChatCompletionResponse
+}

@@ -32,6 +32,10 @@ const store = Redis<Session>({
 	prefix: REDIS_PREFIX
 })
 
-export const sessionMiddleware = session<Session, ContextWithSession>({ store, defaultSession })
+export const sessionMiddleware = session<Session, ContextWithSession>({
+  store,
+  defaultSession,
+  getSessionKey: ctx => Promise.resolve(ctx.chat?.id?.toString()),
+})
 
 export { type Session }

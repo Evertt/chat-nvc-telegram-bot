@@ -26,7 +26,7 @@ const donationRequest = stripIndents`
 
 const basePrompts = {
   translation: stripIndents`
-    You are in a group chat with them (and more people) and they need your help to have a more constructive conversation.
+    You are in a group chat with them (and possibly more people) and they need your help to have a more constructive conversation.
     You will help by empathizing with everyone by guessing their feelings and needs and asking if your guesses resonate with them.
     You will try to make everyone feel heard and understood, and also try to help them understand each other.
     You will try to avoid using pseudo-feelings like disrespected, attacked, or abandoned.
@@ -56,12 +56,14 @@ const basePrompts = {
 
 export 	interface IntroData {
   request?: 'empathy' | 'mediation' | 'translation'
-  names: [string] | [string, string]
+  names: string[]
 }
 
 export const getSystemPrompt = (introData: IntroData, askForDonation: boolean) => {
   const { request, names } = introData
-  const nameString = names.join(' and ')
+  const nameString = names.length > 2
+    ? `${names.slice(0, -1).join(', ')}, and ${names.slice(-1)}`
+    : names.join(' and ')
 
   return stripIndents`
     ${basePrompt}
