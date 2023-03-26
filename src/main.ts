@@ -365,7 +365,18 @@ bot.on([message("text"), message("voice")], async ctx => {
 			false,
 			"translation",
 		)
-		.then(reply => ctx.reply(reply, { reply_to_message_id: ctx.message.message_id }))
+		.then(reply => {
+			if (ctx.session.settings.storeMessagesInGroups) {
+				ctx.session.messages.push({
+					type: "text",
+					name: BOT_NAME,
+					message: reply,
+					date: Date(),
+				})
+			}
+
+			return ctx.reply(reply, { reply_to_message_id: ctx.message.message_id })
+		})
 		.catch(error => {
 			console.error(error)
 			return ctx.reply(OPENAI_OVERLOADED_MESSAGE)
