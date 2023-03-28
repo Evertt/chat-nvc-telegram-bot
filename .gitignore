@@ -3,3 +3,4 @@
 .env.*
 ffmpeg*
 ffprobe*
+src/telegram/telegram.ts
