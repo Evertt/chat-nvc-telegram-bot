@@ -7,6 +7,8 @@ import type { Session } from "./middleware/session/session.ts"
 
 import { type Telegraf, Markup } from "npm:telegraf@4.12.2"
 import { getTokens } from "./tokenizer.ts"
+// @deno-types="npm:@types/lodash-es@4.17.6"
+import { findLastIndex } from "npm:lodash-es@4.17.21"
 
 import { getTranscription } from "./audio-transcriber.ts"
 import { repeat } from "./utils.ts"
@@ -34,6 +36,7 @@ const {
 } = Deno.env.toObject()
 
 const BOT_NAME = "ChatNVC"
+const MAX_TOKENS = 3500
 
 addMiddlewaresToBot(bot)
 
@@ -126,10 +129,9 @@ const moderate = async (input: string) => {
 	return false
 }
 
-const summarize = async (messages: ChatCompletionRequestMessage[]) => {
-	const lastMessage = messages.pop()!
-
-	messages.push({
+const summarize = async (chatMessages: ChatCompletionRequestMessage[]) => {
+	console.log("Trying to get a summary")
+	const summaryMessage = await getAssistantResponse([...chatMessages, {
 		role: "system",
 		content: oneLine`
 			Please summarize the observations, feelings, needs,
@@ -138,52 +140,72 @@ const summarize = async (messages: ChatCompletionRequestMessage[]) => {
 			If there were any valuable insights in the conversation,
 			you can include those too in the summary.
 		`
-	})
+	}])
+	console.log("Got a summary:", summaryMessage.content)
 
-	console.log("Trying to get a summary")
-	const assistantResp = await getAssistantResponse(messages)
-	const summaryMessage = assistantResp.choices[0].message
-	console.log("Got a summary:", summaryMessage?.content)
-
-	if (!summaryMessage) throw new Error("No summary message returned")
-
-	messages.splice(1, Infinity, summaryMessage, lastMessage)
+	return summaryMessage
 }
 
-const needsNewCheckPoint = (messages: Message[], excludeNames: boolean, request: IntroData["request"] = "translation") => {
+const getMessagesFromLastCheckpoint = (messages: Message[]) => {
+	const i = findLastIndex(messages, message => !!message.checkpoint)
+	return messages.slice(Math.max(i, 0))
+}
+
+const getNamesFromMessages = (messages: Message[]) => {
+	const names = new Set(messages.map(msg => msg.name))
+	names.delete(BOT_NAME)
+	return [...names]
+}
+
+const convertToChatMessages = (messages: Message[], allNames: string[], excludeNames: boolean, request: IntroData["request"] = "translation") => {
 	const chatMessages: ChatCompletionRequestMessage[] = messages.map(msg => (
 		{ role: /chatnvc/i.test(msg.name) ? "assistant" : "user", content: `${excludeNames || msg.name === BOT_NAME ? '' : msg.name + ": "}${msg.message}` }
 	))
 
-	const names = new Set(messages.map(msg => msg.name))
-	names.delete(BOT_NAME)
-
 	const systemPrompt = getSystemPrompt(
 		{
 			request,
-			names: [...names],
+			names: allNames,
 		},
 		false,
 	)
 
 	chatMessages.unshift({ role: "system", content: systemPrompt })
 
+	return chatMessages
+}
+
+const getTokenCount = (chatMessages: ChatCompletionRequestMessage[]) => {
 	const tokenCount = chatMessages.reduce(
 		(tokenCount, msg) => tokenCount + getTokens(msg.content),
 		0
 	)
 
-	return [tokenCount > 3750, chatMessages] as const
+	return tokenCount
 }
 
-const addNewCheckPointIfNeeded = (messages: Message[], excludeNames = false, request: IntroData["request"] = "translation") => {
-	const [needsNewCheckpoint, chatMessages] = needsNewCheckPoint(messages, excludeNames, request)
+const addNewCheckPointIfNeeded = async (messages: Message[], excludeNames = false, request: IntroData["request"] = "translation") => {
+	const allNames = getNamesFromMessages(messages)
+	messages = getMessagesFromLastCheckpoint(messages)
+	let chatMessages = convertToChatMessages(messages, allNames, excludeNames, request)
+	let tokenCount = getTokenCount(chatMessages)
+	const lastMessages: Message[] = []
 
-	if (!needsNewCheckpoint) return
-
-	summarize(chatMessages)
-	const lastMessage = messages.pop()!
-
+	while (tokenCount >= MAX_TOKENS && messages.length) {
+		lastMessages.unshift(messages.pop()!)
+		chatMessages = convertToChatMessages(messages, allNames, excludeNames, request)
+		const summary = await summarize(chatMessages)
+		chatMessages = convertToChatMessages(lastMessages, allNames, excludeNames, request)
+		chatMessages.unshift(summary)
+		tokenCount = getTokenCount(chatMessages)
+	}
+	
+	if (tokenCount >= MAX_TOKENS)
+		throw new Error("Messages too long to summarize")
+	
+	if (!lastMessages.length)
+		return { messages, chatMessages }
+	
 	const summaryMessage: Message = {
 		type: "text",
 		name: BOT_NAME,
@@ -192,68 +214,21 @@ const addNewCheckPointIfNeeded = (messages: Message[], excludeNames = false, req
 		checkpoint: true,
 	}
 
-	messages.push(summaryMessage, lastMessage)
+	messages = [summaryMessage, ...lastMessages]
+
+	return { messages, chatMessages }
 }
 
-const getReply = async (messages: Message[], name: string, text: string, type: "text" | "voice", askForDonation: boolean, request: IntroData["request"] = "empathy") => {
-	// console.log("Generating reply")
-
-	let moderationResult = await moderate(text)
+const getReply = async (chatMessages: ChatCompletionRequestMessage[]) => {
+	let moderationResult = await moderate(chatMessages.at(-1)!.content)
 	if (moderationResult) return oneLineCommaListsAnd`
 		Your message was flagged by OpenAI for ${moderationResult}.
 		Please try to rephrase your message. 🙏
 	`
 
-	messages.push({
-		type,
-		name: name,
-		message: text,
-		date: Date(),
-	})
+	const assistantResponse = await getAssistantResponse(chatMessages);
 	
-	const chatMessages: ChatCompletionRequestMessage[] = messages.map(msg => (
-		{ role: /chatnvc/i.test(msg.name) ? "assistant" : "user", content: `${msg.name === BOT_NAME ? '' : msg.name + ": "}${msg.message}` }
-	))
-
-	const systemPrompt = getSystemPrompt(
-		{
-			request,
-			names: [name],
-		},
-		askForDonation,
-	)
-
-	chatMessages.unshift({ role: "system", content: systemPrompt })
-
-	const tokenCount = chatMessages.reduce(
-		(tokenCount, msg) => tokenCount + getTokens(msg.content),
-		0
-	)
-
-	if (tokenCount > 3750) {
-		summarize(chatMessages)
-
-		const lastMessage = messages.pop()!
-		const summaryMessage: Message = {
-			type: "text",
-			name: BOT_NAME,
-			message: chatMessages[1].content,
-			date: Date(),
-			checkpoint: true,
-		}
-
-		messages.push(summaryMessage, lastMessage)
-	}
-
-	const completionResponse: CreateChatCompletionResponse = await getAssistantResponse(chatMessages);
-	
-	let assistantResponse = completionResponse.choices[0]?.message?.content ?? ""
-
-	if (assistantResponse === "") {
-		throw new Error("OpenAI returned an empty response")
-	}
-
-	moderationResult = await moderate(assistantResponse)
+	moderationResult = await moderate(assistantResponse.content)
 	if (moderationResult) return oneLine`
 		Sorry, I was about to say something potentially inappropriate.
 		I don't know what happened.
@@ -262,17 +237,16 @@ const getReply = async (messages: Message[], name: string, text: string, type: "
 		Thank you. 🙏
 	`
 
-	assistantResponse = assistantResponse
-		.replace(/^chatnvc\w*: /i, "")
-
 	// messages.push({
 	// 	type: "text",
 	// 	name: BOT_NAME,
-	// 	message: assistantResponse,
+	// 	message: assistantResponse.content,
 	// 	date: Date(),
 	// })
 
-	return assistantResponse
+	// chatMessages.push(assistantResponse)
+
+	return assistantResponse.content
 }
 
 bot.on([message("text"), message("voice")], async ctx => {
@@ -295,46 +269,28 @@ bot.on([message("text"), message("voice")], async ctx => {
 			` + `\n\n<i>${text}</i>`)
 	}
 
-	if (ctx.chat.type === "private" || ctx.session.settings.storeMessagesInGroups) {
-		ctx.session.messages.push({
-			type: "text" in ctx.message ? "text" : "voice",
-			name: ctx.from.first_name,
-			message: text,
-			date: Date(),
-		})
-
-		addNewCheckPointIfNeeded(ctx.session.messages, ctx.chat.type === "private")
+	const lastMessage: Message = {
+		type: "text" in ctx.message ? "text" : "voice",
+		name: ctx.from.first_name,
+		message: text,
+		date: Date(),
 	}
 
-	if (ctx.chat.type === "group") {
+	if (ctx.chat.type === "private" || ctx.session.settings.storeMessagesInGroups) {
+		ctx.session.messages.push(lastMessage)
+	}
+
+	const isPrivate = ctx.chat.type === "private"
+	let messages = ctx.session.messages
+	const messagesFromLastCheckpoint = getMessagesFromLastCheckpoint(messages)
+	let chatMessages: ChatCompletionRequestMessage[] = []
+
+	if (!isPrivate) {
 		const wasMentioned = "text" in ctx.message
 			? ctx.message.text.includes(`@${ctx.me}`)
 			: text.includes(BOT_NAME)
 
 		const reply = ctx.message.reply_to_message
-		const messages = [ ...ctx.session.messagesFromLastCheckpoint ]
-
-		if (!reply || ctx.session.settings.storeMessagesInGroups) {
-			// do nothing
-		} else if ("text" in reply) {
-			messages.push({
-				type: "text",
-				name: reply.from!.first_name,
-				message: reply.text,
-				date: new Date(reply.date).toString()
-			})
-		} else if ("voice" in reply) {
-			const { file_id } = reply.voice
-			const fileLink = await ctx.telegram.getFileLink(file_id)
-			const transcription = await getTranscription(fileLink as URL)
-
-			messages.push({
-				type: "voice",
-				name: reply.from!.first_name,
-				message: transcription,
-				date: new Date(reply.date).toString()
-			})
-		}
 
 		if (!wasMentioned) {
 			if (!reply) return // void (console.log("and there was no reply either"))
@@ -350,19 +306,33 @@ bot.on([message("text"), message("voice")], async ctx => {
 			`)
 		}
 
+		if (reply) {
+			let text = "text" in reply ? reply.text : ""
+
+			if ("voice" in reply) {
+				const { file_id } = reply.voice
+				const fileLink = await ctx.telegram.getFileLink(file_id)
+				text = await getTranscription(fileLink as URL)
+			}
+
+			messages = [lastMessage]
+
+			messages.unshift({
+				type: "text" in reply ? "text" : "voice",
+				name: reply.from!.first_name,
+				message: text,
+				date: new Date(reply.date).toString(),
+			})
+
+			;({ messages, chatMessages } = await addNewCheckPointIfNeeded(messages, false, "translation"))
+		}
+
 		const stopTyping = repeat(
 			() => ctx.sendChatAction("typing"),
 			5100
 		)
 
-		return getReply(
-			messages,
-			ctx.from.first_name,
-			text,
-			"text" in ctx.message ? "text" : "voice",
-			false,
-			"translation",
-		)
+		return getReply(chatMessages)
 		.then(reply => {
 			if (ctx.session.settings.storeMessagesInGroups) {
 				ctx.session.messages.push({
@@ -382,6 +352,16 @@ bot.on([message("text"), message("voice")], async ctx => {
 		.finally(stopTyping)
 	}
 
+	({ messages, chatMessages } = await addNewCheckPointIfNeeded(
+		messages, isPrivate, isPrivate ? "empathy" : "translation"
+	))
+
+	if (messagesFromLastCheckpoint[0].message !== messages[0].message) {
+		ctx.session.messages.splice(
+			ctx.session.messages.length - messages.length + 1, 0, messages[0]
+		)
+	}
+
 	const replyStub = await ctx.replyWithHTML(oneLine`
 		<i>I'll need a moment to process what you said, please wait...</i> 🙏
 	`)
@@ -391,13 +371,7 @@ bot.on([message("text"), message("voice")], async ctx => {
 		5100
 	)
 
-	await getReply(
-		ctx.session.messagesFromLastCheckpoint,
-		ctx.from.first_name,
-		text,
-		"text" in ctx.message ? "text" : "voice",
-		ctx.session.settings.askForDonation !== false
-	)
+	await getReply(chatMessages)
 		.then(reply => {
 			ctx.session.messages.push({
 				type: "text",
@@ -513,5 +487,15 @@ async function getAssistantResponse(chatMessages: ChatCompletionRequestMessage[]
     throw new Error(err)
   }
 
-  return await chatResponse.json() as CreateChatCompletionResponse
+	const completionResponse = await chatResponse.json() as CreateChatCompletionResponse
+	const assistantMessage = completionResponse.choices[0]?.message
+
+	if (!assistantMessage) {
+		throw new Error("OpenAI returned an empty response")
+	}
+
+	assistantMessage.content = assistantMessage.content
+		.replace(/^chatnvc\w*: /i, "")
+
+  return assistantMessage
 }
