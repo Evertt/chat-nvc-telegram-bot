@@ -23,7 +23,7 @@ import type {
 	CreateChatCompletionResponse,
 	ChatCompletionRequestMessage,
 } from "npm:openai@3.2.1"
-import { isBotAskingForDonation } from "./donations.ts";
+import { isBotAskingForDonation } from "./donations.ts"
 
 type Message = Session["messages"][number]
 
@@ -226,7 +226,7 @@ const getReply = async (chatMessages: ChatCompletionRequestMessage[]) => {
 		Please try to rephrase your message. 🙏
 	`
 
-	const assistantResponse = await getAssistantResponse(chatMessages);
+	const assistantResponse = await getAssistantResponse(chatMessages)
 	
 	moderationResult = await moderate(assistantResponse.content)
 	if (moderationResult) return oneLine`
@@ -236,15 +236,6 @@ const getReply = async (chatMessages: ChatCompletionRequestMessage[]) => {
 		That might help me to formulate a more appropriate response.
 		Thank you. 🙏
 	`
-
-	// messages.push({
-	// 	type: "text",
-	// 	name: BOT_NAME,
-	// 	message: assistantResponse.content,
-	// 	date: Date(),
-	// })
-
-	// chatMessages.push(assistantResponse)
 
 	return assistantResponse.content
 }
@@ -443,35 +434,12 @@ bot.action(/donate_(\d+)/, async ctx => {
 	`)
 })
 
-const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
-  ? {
-      domain: DOMAIN,
-      port: +PORT,
-      hookPath: "/",
-      secretToken: TELEGRAM_WEBBOOK_TOKEN,
-    }
-  : undefined
-
-// Enable graceful stop
-Deno.addSignalListener("SIGINT", () => {
-  bot.stop("SIGINT")
-  Deno.exit()
-})
-
-Deno.addSignalListener("SIGTERM", () => {
-  bot.stop("SIGTERM")
-  Deno.exit()
-})
-
-console.log("Starting bot...")
-await bot.launch({ webhook })
-
 async function getAssistantResponse(chatMessages: ChatCompletionRequestMessage[]) {
   const chatRequestOpts: CreateChatCompletionRequest = {
     model: "gpt-3.5-turbo",
     temperature: 0.9,
     messages: chatMessages,
-  };
+  }
 
   const chatResponse = await fetch("https://api.openai.com/v1/chat/completions", {
     headers: {
@@ -499,3 +467,26 @@ async function getAssistantResponse(chatMessages: ChatCompletionRequestMessage[]
 
   return assistantMessage
 }
+
+const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
+  ? {
+      domain: DOMAIN,
+      port: +PORT,
+      hookPath: "/",
+      secretToken: TELEGRAM_WEBBOOK_TOKEN,
+    }
+  : undefined
+
+// Enable graceful stop
+Deno.addSignalListener("SIGINT", () => {
+  bot.stop("SIGINT")
+  Deno.exit()
+})
+
+Deno.addSignalListener("SIGTERM", () => {
+  bot.stop("SIGTERM")
+  Deno.exit()
+})
+
+console.log("Starting bot...")
+await bot.launch({ webhook })
