@@ -194,17 +194,18 @@ const addNewCheckPointIfNeeded = async (messages: Message[], excludeNames = fals
 	while (tokenCount >= MAX_TOKENS && messages.length) {
 		lastMessages.unshift(messages.pop()!)
 		chatMessages = convertToChatMessages(messages, allNames, excludeNames, request)
-		const summary = await summarize(chatMessages)
-		chatMessages = convertToChatMessages(lastMessages, allNames, excludeNames, request)
-		chatMessages.splice(1, 0, summary)
 		tokenCount = getTokenCount(chatMessages)
 	}
 	
 	if (tokenCount >= MAX_TOKENS)
 		throw new Error("Messages too long to summarize")
-	
+
 	if (!lastMessages.length)
 		return { messages, chatMessages }
+	
+	const summary = await summarize(chatMessages)
+	chatMessages = convertToChatMessages(lastMessages, allNames, excludeNames, request)
+	chatMessages.splice(1, 0, summary)
 	
 	const summaryMessage: Message = {
 		type: "text",
