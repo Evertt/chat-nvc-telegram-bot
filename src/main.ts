@@ -193,7 +193,7 @@ const addNewCheckPointIfNeeded = async (messages: Message[], excludeNames = fals
 
 	while (tokenCount >= MAX_TOKENS && messages.length) {
 		lastMessages.unshift(messages.pop()!)
-		chatMessages = convertToChatMessages(messages, allNames, excludeNames, request)
+		chatMessages.pop()
 		tokenCount = getTokenCount(chatMessages)
 	}
 	
@@ -210,14 +210,12 @@ const addNewCheckPointIfNeeded = async (messages: Message[], excludeNames = fals
 	const summaryMessage: Message = {
 		type: "text",
 		name: BOT_NAME,
-		message: chatMessages[1].content,
+		message: summary.content,
 		date: Date(),
 		checkpoint: true,
 	}
 
-	messages = [summaryMessage, ...lastMessages]
-
-	return { messages, chatMessages }
+	return { messages: [summaryMessage, ...lastMessages], chatMessages }
 }
 
 const getReply = async (chatMessages: ChatCompletionRequestMessage[]) => {
