@@ -242,6 +242,8 @@ const getReply = async (chatMessages: ChatCompletionRequestMessage[]) => {
 bot.on([message("text"), message("voice")], async ctx => {
 	if (ctx.chat.type === "supergroup") return
 
+	const chatIsPrivate = ctx.chat.type === "private"
+
 	let text = ''
 
 	if ("text" in ctx.message) {
@@ -266,16 +268,15 @@ bot.on([message("text"), message("voice")], async ctx => {
 		date: Date(),
 	}
 
-	if (ctx.chat.type === "private" || ctx.session.settings.storeMessagesInGroups) {
+	if (chatIsPrivate || ctx.session.settings.storeMessagesInGroups) {
 		ctx.session.messages.push(lastMessage)
 	}
 
-	const isPrivate = ctx.chat.type === "private"
 	let messages = ctx.session.messages
 	const messagesFromLastCheckpoint = getMessagesFromLastCheckpoint(messages)
 	let chatMessages: ChatCompletionRequestMessage[] = []
 
-	if (!isPrivate) {
+	if (!chatIsPrivate) {
 		const wasMentioned = "text" in ctx.message
 			? ctx.message.text.includes(`@${ctx.me}`)
 			: text.includes(BOT_NAME)
@@ -343,7 +344,7 @@ bot.on([message("text"), message("voice")], async ctx => {
 	}
 
 	({ messages, chatMessages } = await addNewCheckPointIfNeeded(
-		messages, isPrivate, isPrivate ? "empathy" : "translation"
+		messages, chatIsPrivate, chatIsPrivate ? "empathy" : "translation"
 	))
 
 	if (messagesFromLastCheckpoint[0].message !== messages[0].message) {
