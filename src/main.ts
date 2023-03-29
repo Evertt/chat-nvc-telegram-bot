@@ -196,7 +196,7 @@ const addNewCheckPointIfNeeded = async (messages: Message[], excludeNames = fals
 		chatMessages = convertToChatMessages(messages, allNames, excludeNames, request)
 		const summary = await summarize(chatMessages)
 		chatMessages = convertToChatMessages(lastMessages, allNames, excludeNames, request)
-		chatMessages.unshift(summary)
+		chatMessages.splice(1, 0, summary)
 		tokenCount = getTokenCount(chatMessages)
 	}
 	
