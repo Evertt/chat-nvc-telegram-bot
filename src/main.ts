@@ -489,4 +489,4 @@ Deno.addSignalListener("SIGTERM", () => {
 })
 
 console.log("Starting bot...")
-await bot.launch({ webhook })
+await bot.launch({ webhook, dropPendingUpdates: true })
