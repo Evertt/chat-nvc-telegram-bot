@@ -353,9 +353,9 @@ bot.on([message("text"), message("voice")], async ctx => {
 		)
 	}
 
-	const replyStub = await ctx.replyWithHTML(oneLine`
-		<i>I'll need a moment to process what you said, please wait...</i> 🙏
-	`)
+	// const replyStub = await ctx.replyWithHTML(oneLine`
+	// 	<i>I'll need a moment to process what you said, please wait...</i> 🙏
+	// `)
 
 	const stopTyping = repeat(
 		() => ctx.sendChatAction("typing"),
@@ -376,10 +376,7 @@ bot.on([message("text"), message("voice")], async ctx => {
 				&& ctx.session.settings.askForDonation !== false
 				&& isBotAskingForDonation(reply)
 
-				return ctx.telegram.editMessageText(
-					ctx.chat.id,
-					replyStub.message_id,
-					undefined,
+				return ctx.reply(
 					reply,
 					!askForDonation ? {} : Markup.inlineKeyboard([
 						[
@@ -397,10 +394,7 @@ bot.on([message("text"), message("voice")], async ctx => {
     .catch(error => {
 			console.log("Error:", error)
 
-			return ctx.telegram.editMessageText(
-				ctx.chat.id,
-				replyStub.message_id,
-				undefined,
+			return ctx.reply(
 				OPENAI_OVERLOADED_MESSAGE,
 			)
 		})
