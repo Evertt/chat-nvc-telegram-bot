@@ -1,10 +1,10 @@
-import { Telegraf, Scenes } from "npm:telegraf@4.12.2"
+import { Telegraf, Scenes } from "npm:telegraf@4.12.3-canary.1"
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-import { type ContextWithSession, SceneSessionData } from "./middleware/session/session.ts"
+import { type ContextWithMultiSession, SceneSessionData } from "./middleware/session/session.ts"
 
 const { TELEGRAM_KEY } = Deno.env.toObject()
 
-export interface MyContext extends ContextWithSession {
+export interface MyContext extends ContextWithMultiSession {
 	// declare scene type
 	scene: Scenes.SceneContextScene<MyContext, SceneSessionData>
 }

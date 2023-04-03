@@ -5,7 +5,7 @@ import type { NewSession } from "../new-session.ts"
 import { Message as PrevMessage, Session as PrevSession } from "./v1.ts";
 
 export type Message = Modify<PrevMessage, {
-  timestamp: undefined
+  timestamp: never
   date: string
   checkpoint?: boolean
 }>

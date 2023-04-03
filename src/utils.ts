@@ -10,11 +10,11 @@ export const sleep = (ms: number) => new Promise<void>(
 export const repeat = (fn: () => Promise<unknown>, ms: number) => {
 	let stop = false
 
-	const innerFn = async () => {
-		while (!stop) {
-			await fn()
-			await sleep(ms)
-		}
+	const innerFn = () => {
+		if (stop) return
+		fn().then(() => {
+			if (!stop) setTimeout(innerFn, ms)
+		})
 	}
 
 	innerFn()

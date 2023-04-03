@@ -1,11 +1,11 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 
-import { bot } from "./bot.ts"
+import { bot, type MyContext } from "./bot.ts"
 import { addMiddlewaresToBot } from "./middleware/add-all-to-bot.ts"
 import { addScenesToBot } from "./scenes/add-all-to-bot.ts"
-import type { Session } from "./middleware/session/session.ts"
+import { queue } from "./middleware/session/session.ts"
 
-import { type Telegraf, Markup } from "npm:telegraf@4.12.2"
+import { type Telegraf, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { getTokens } from "./tokenizer.ts"
 // @deno-types="npm:@types/lodash-es@4.17.6"
 import { findLastIndex } from "npm:lodash-es@4.17.21"
@@ -15,7 +15,7 @@ import { repeat } from "./utils.ts"
 import { OPENAI_OVERLOADED_MESSAGE } from "./error-messages.ts"
 // @deno-types="npm:@types/common-tags@1.8.1"
 import { oneLine, oneLineCommaListsAnd, stripIndents } from "npm:common-tags@1.8.1"
-import { message } from "npm:telegraf@4.12.2/filters"
+import { message } from "npm:telegraf@4.12.3-canary.1/filters"
 import { IntroData, getSystemPrompt } from "./system-prompt.ts"
 import type {
 	CreateModerationResponse,
@@ -25,7 +25,8 @@ import type {
 } from "npm:openai@3.2.1"
 import { isBotAskingForDonation } from "./donations.ts"
 
-type Message = Session["messages"][number]
+
+type Message = MyContext["chatSession"]["messages"][number]
 
 const {
   OPENAI_KEY,
@@ -50,7 +51,7 @@ bot.start(async ctx => {
 	if (ctx.chat.type !== "private")
 		return ctx.reply("Please write to me in a private chat 🙏")
 
-	const greeting = ctx.session.metaData.haveSpokenBefore
+	const greeting = ctx.userSession.haveSpokenBefore
 		? `Okay, let's start over. How can I help you this time, ${ctx.from.first_name}?`
 		: stripIndents`
 			Hi ${ctx.from.first_name}, I'm ChatNVC.
@@ -66,7 +67,7 @@ bot.start(async ctx => {
 		`
 
 	console.log("Resetting session to start with greeting.")
-	ctx.session.messages = [
+	ctx.chatSession.messages = [
 		{
 			type: "text",
 			name: BOT_NAME,
@@ -239,168 +240,176 @@ const getReply = async (chatMessages: ChatCompletionRequestMessage[]) => {
 	return assistantResponse.content
 }
 
-bot.on([message("text"), message("voice")], async ctx => {
-	if (ctx.chat.type === "supergroup") return
-
-	const chatIsPrivate = ctx.chat.type === "private"
-
-	let text = ''
-
-	if ("text" in ctx.message) {
-		text = ctx.message.text
-	} else if ("voice" in ctx.message) {
-		const { file_id } = ctx.message.voice
-		const fileLink = await ctx.telegram.getFileLink(file_id)
-		text = await getTranscription(fileLink as URL)
-
-		if (ctx.session.settings.receiveVoiceTranscriptions && ctx.chat.type === "private")
-			await ctx.replyWithHTML(oneLine`
-				Thanks for sharing. I just want to share
-				my transcription of your voice message,
-				just so that you can check if I heard you correctly:
-			` + `\n\n<i>${text}</i>`)
-	}
-
-	const lastMessage: Message = {
-		type: "text" in ctx.message ? "text" : "voice",
-		name: ctx.from.first_name,
-		message: text,
-		date: Date(),
-	}
-
-	if (chatIsPrivate || ctx.session.settings.storeMessagesInGroups) {
-		ctx.session.messages.push(lastMessage)
-	}
-
-	let messages = ctx.session.messages
-	const messagesFromLastCheckpoint = getMessagesFromLastCheckpoint(messages)
-	let chatMessages: ChatCompletionRequestMessage[] = []
-
-	if (!chatIsPrivate) {
-		const wasMentioned = "text" in ctx.message
-			? ctx.message.text.includes(`@${ctx.me}`)
-			: text.includes(BOT_NAME)
-
-		const reply = ctx.message.reply_to_message
-
-		if (!wasMentioned) {
-			if (!reply) return // void (console.log("and there was no reply either"))
-			if (reply.from?.id !== me.id) return
+bot.on([message("text"), message("voice")], context => {
+	const job = async (ctx: typeof context) => {
+		if (ctx.chat.type === "supergroup") return
+	
+		const chatIsPrivate = ctx.chat.type === "private"
+	
+		let text = ''
+	
+		if ("voice" in ctx.message) {
+			console.log("Got a voice message")
+			const { file_id } = ctx.message.voice
+			const fileLink = await ctx.telegram.getFileLink(file_id)
+			text = await getTranscription(fileLink as URL)
+	
+			if (ctx.userSession.settings.receiveVoiceTranscriptions && ctx.chat.type === "private")
+				await ctx.replyWithHTML(oneLine`
+					Thanks for sharing. I just want to share
+					my transcription of your voice message,
+					just so that you can check if I heard you correctly:
+				` + `\n\n<i>${text}</i>`)
 		}
-
-		if (text.includes("/keep_track")) {
-			ctx.session.settings.storeMessagesInGroups = true
-
-			return ctx.reply(oneLine`
-				Okay, I'll keep track of all messages in this group from now on.
-				So that I can hopefully offer better empathy when asked.
-			`)
+		else if ("text" in ctx.message) {
+			console.log("Got a text message:", ctx.message.text)
+			text = ctx.message.text
 		}
-
-		if (reply) {
-			let text = "text" in reply ? reply.text : ""
-
-			if ("voice" in reply) {
-				const { file_id } = reply.voice
-				const fileLink = await ctx.telegram.getFileLink(file_id)
-				text = await getTranscription(fileLink as URL)
+	
+		const lastMessage: Message = {
+			type: "text" in ctx.message ? "text" : "voice",
+			name: ctx.from.first_name,
+			message: text,
+			date: Date(),
+		}
+	
+		if (ctx.chatSession.storeMessages) {
+			ctx.chatSession.messages.push(lastMessage)
+		}
+	
+		let messages = ctx.chatSession.messages
+		const messagesFromLastCheckpoint = getMessagesFromLastCheckpoint(messages)
+		let chatMessages: ChatCompletionRequestMessage[] = []
+	
+		if (!chatIsPrivate) {
+			const wasMentioned = "text" in ctx.message
+				? ctx.message.text.includes(`@${ctx.me}`)
+				: text.includes(BOT_NAME)
+	
+			const reply = ctx.message.reply_to_message
+	
+			if (!wasMentioned) {
+				if (!reply) return // void (console.log("and there was no reply either"))
+				if (reply.from?.id !== me.id) return
 			}
-
-			messages = [lastMessage]
-
-			messages.unshift({
-				type: "text" in reply ? "text" : "voice",
-				name: reply.from!.first_name,
-				message: text,
-				date: new Date(reply.date).toString(),
+	
+			if (text.includes("/keep_track")) {
+				ctx.chatSession.storeMessages = true
+	
+				return ctx.reply(oneLine`
+					Okay, I'll keep track of all messages in this group from now on.
+					So that I can hopefully offer better empathy when asked.
+				`)
+			}
+	
+			if (reply) {
+				let text = "text" in reply ? reply.text : ""
+	
+				if ("voice" in reply) {
+					const { file_id } = reply.voice
+					const fileLink = await ctx.telegram.getFileLink(file_id)
+					text = await getTranscription(fileLink as URL)
+				}
+	
+				messages = [lastMessage]
+	
+				messages.unshift({
+					type: "text" in reply ? "text" : "voice",
+					name: reply.from!.first_name,
+					message: text,
+					date: new Date(reply.date).toString(),
+				})
+	
+				;({ messages, chatMessages } = await addNewCheckPointIfNeeded(messages, false, "translation"))
+			}
+	
+			const stopTyping = repeat(
+				() => ctx.sendChatAction("typing"),
+				5100
+			)
+	
+			return getReply(chatMessages)
+			.then(reply => {
+				if (ctx.chatSession.storeMessages) {
+					ctx.chatSession.messages.push({
+						type: "text",
+						name: BOT_NAME,
+						message: reply,
+						date: Date(),
+					})
+				}
+	
+				return ctx.reply(reply, { reply_to_message_id: ctx.message.message_id })
 			})
-
-			;({ messages, chatMessages } = await addNewCheckPointIfNeeded(messages, false, "translation"))
+			.catch(error => {
+				console.error(error)
+				return ctx.reply(OPENAI_OVERLOADED_MESSAGE)
+			})
+			.finally(stopTyping)
 		}
+	
+		({ messages, chatMessages } = await addNewCheckPointIfNeeded(
+			messages, chatIsPrivate, chatIsPrivate ? "empathy" : "translation"
+		))
+	
+		if (messagesFromLastCheckpoint[0].message !== messages[0].message) {
+			ctx.chatSession.messages.splice(
+				ctx.chatSession.messages.length - messages.length + 1, 0, messages[0]
+			)
 
-		const stopTyping = repeat(
-			() => ctx.sendChatAction("typing"),
-			5100
-		)
-
-		return getReply(chatMessages)
-		.then(reply => {
-			if (ctx.session.settings.storeMessagesInGroups) {
-				ctx.session.messages.push({
+			// // deno-lint-ignore no-self-assign
+			// ctx.chatSession.messages = ctx.chatSession.messages
+		}
+	
+		// const replyStub = await ctx.replyWithHTML(oneLine`
+		// 	<i>I'll need a moment to process what you said, please wait...</i> 🙏
+		// `)
+	
+		return ctx.persistentChatAction(
+			"typing",
+			() => getReply(chatMessages)
+			.then(async reply => {
+				ctx.chatSession.messages.push({
 					type: "text",
 					name: BOT_NAME,
 					message: reply,
 					date: Date(),
 				})
-			}
 
-			return ctx.reply(reply, { reply_to_message_id: ctx.message.message_id })
-		})
-		.catch(error => {
-			console.error(error)
-			return ctx.reply(OPENAI_OVERLOADED_MESSAGE)
-		})
-		.finally(stopTyping)
-	}
+				const askForDonation =
+					PAYMENT_TOKEN
+					&& ctx.chat.type === "private"
+					&& ctx.userSession.settings.askForDonation !== false
+					&& isBotAskingForDonation(reply)
 
-	({ messages, chatMessages } = await addNewCheckPointIfNeeded(
-		messages, chatIsPrivate, chatIsPrivate ? "empathy" : "translation"
-	))
-
-	if (messagesFromLastCheckpoint[0].message !== messages[0].message) {
-		ctx.session.messages.splice(
-			ctx.session.messages.length - messages.length + 1, 0, messages[0]
-		)
-	}
-
-	// const replyStub = await ctx.replyWithHTML(oneLine`
-	// 	<i>I'll need a moment to process what you said, please wait...</i> 🙏
-	// `)
-
-	const stopTyping = repeat(
-		() => ctx.sendChatAction("typing"),
-		5100
-	)
-
-	await getReply(chatMessages)
-		.then(reply => {
-			ctx.session.messages.push({
-				type: "text",
-				name: BOT_NAME,
-				message: reply,
-				date: Date(),
+					await ctx.reply(
+						reply,
+						!askForDonation ? {} : Markup.inlineKeyboard([
+							[
+								Markup.button.callback("No, I don't want to donate right now.", "no_donation"),
+								Markup.button.callback("No, and please don't ask me again.", "never_donation"),
+							],
+							[
+								Markup.button.callback("$1", "donate_1"),
+								Markup.button.callback("$2", "donate_2"),
+								Markup.button.callback("$4", "donate_4"),
+							]
+						])
+					)
 			})
-
-			const askForDonation =
-				PAYMENT_TOKEN
-				&& ctx.session.settings.askForDonation !== false
-				&& isBotAskingForDonation(reply)
-
-				return ctx.reply(
-					reply,
-					!askForDonation ? {} : Markup.inlineKeyboard([
-						[
-							Markup.button.callback("No, I don't want to donate right now.", "no_donation"),
-							Markup.button.callback("No, and please don't ask me again.", "never_donation"),
-						],
-						[
-							Markup.button.callback("$1", "donate_1"),
-							Markup.button.callback("$2", "donate_2"),
-							Markup.button.callback("$4", "donate_4"),
-						]
-					])
+	    .catch(async error => {
+				console.log("Error:", error)
+	
+				await ctx.reply(
+					OPENAI_OVERLOADED_MESSAGE,
 				)
-		})
-    .catch(error => {
-			console.log("Error:", error)
-
-			return ctx.reply(
-				OPENAI_OVERLOADED_MESSAGE,
+			})
 			)
-		})
-    .finally(stopTyping)
+	
+		// console.log("Reply sent.")
+	}
 
-	// console.log("Reply sent.")
+	queue.push(job, context)
 })
 
 bot.action("no_donation", ctx =>
@@ -412,7 +421,7 @@ bot.action("no_donation", ctx =>
 ))
 
 bot.action("never_donation", async ctx => {
-	ctx.session.settings.askForDonation = false
+	ctx.userSession.settings.askForDonation = false
 	await ctx.editMessageText(oneLine`
 		Thank you for taking care of yourself, I sincerely appreciate it.
 		You are always welcome to ask for more empathy whenever you need it.
@@ -422,10 +431,7 @@ bot.action("never_donation", async ctx => {
 bot.action(/donate_(\d+)/, async ctx => {
 	const donationAmount = parseInt(ctx.match[1])
 	await ctx.answerCbQuery(`Thank you for your donation of $${donationAmount}!`)
-	await ctx.editMessageText(oneLine`
-		Thank you for your donation of $${donationAmount}!
-		You are always welcome to ask for more empathy whenever you need it.
-	`)
+	await ctx.deleteMessage()
 })
 
 async function getAssistantResponse(chatMessages: ChatCompletionRequestMessage[]) {

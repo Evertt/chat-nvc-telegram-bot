@@ -1,12 +1,12 @@
-import { type MyContext } from "../bot.ts"
-import { Telegraf, Scenes, Markup } from "npm:telegraf@4.12.2"
+import type { MyContext } from "../bot.ts"
+import { Telegraf, Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 // @deno-types="npm:@types/common-tags@1.8.1"
 import { stripIndents, oneLine } from "npm:common-tags@1.8.1"
 
 export const SETTINGS_SCENE = "SETTINGS"
 export const settingsScene = new Scenes.BaseScene<MyContext>(SETTINGS_SCENE)
 
-type SettingsKeys = keyof MyContext["session"]["settings"]
+type SettingsKeys = keyof MyContext["userSession"]["settings"]
 
 type SettingsMenu = {
   [key in SettingsKeys]: {
@@ -27,16 +27,16 @@ const settingsMenu = {
 settingsScene.enter(async ctx => {
   console.log("Entering settings scene...")
   const currentSettingsList = Object.entries(settingsMenu)
-    .filter(([key]) => typeof ctx.session.settings[key as SettingsKeys] === "boolean")
+    .filter(([key]) => typeof ctx.userSession.settings[key as SettingsKeys] === "boolean")
     .map(([key, { subject, verb }]) => stripIndents`
-      - I <b>${ctx.session.settings[key as SettingsKeys] ? "do" : "do not"}</b> want to ${verb} ${subject}.
+      - I <b>${ctx.userSession.settings[key as SettingsKeys] ? "do" : "do not"}</b> want to ${verb} ${subject}.
     `)
     .join("\n")
 
   const currentSettingsChoices = Object.entries(settingsMenu)
     .map(([key, { subject, verb }]) =>
       [Markup.button.callback(oneLine`
-        I ${ctx.session.settings[key as SettingsKeys] ? "DO NOT" : "DO"}
+        I ${ctx.userSession.settings[key as SettingsKeys] ? "DO NOT" : "DO"}
         want to ${verb} ${subject}.
       `, key)]
     )
@@ -83,7 +83,7 @@ settingsScene.action(/.+/, async ctx => {
 
   if (!settingsMenu[key]) throw new Error(`Unknown setting key: ${key}`)
 
-  ctx.session.settings[key] = !ctx.session.settings[key]
+  ctx.userSession.settings[key] = !ctx.userSession.settings[key]
 
   const current = ctx.scene.current!
   const handler =
@@ -107,7 +107,7 @@ settingsScene.leave(async ctx => {
 
   await ctx.reply(oneLine`
     Great! Your settings have been saved.
-    ${ctx.session.messages.length > 1
+    ${ctx.chatSession.messages.length > 1
       ? "Please continue sharing if you would like to receive more empathy from me."
       : "Would you like to receive empathy for anything?"
     }
