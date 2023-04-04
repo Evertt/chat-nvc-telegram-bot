@@ -250,16 +250,20 @@ bot.on([message("text"), message("voice")], context => {
 	
 		if ("voice" in ctx.message) {
 			console.log("Got a voice message")
+			await ctx.reply(`Okay, I'm listening...`)
 			const { file_id } = ctx.message.voice
 			const fileLink = await ctx.telegram.getFileLink(file_id)
 			text = await getTranscription(fileLink as URL)
 	
-			if (ctx.userSession.settings.receiveVoiceTranscriptions && ctx.chat.type === "private")
+			if (ctx.userSession.settings.receiveVoiceTranscriptions && ctx.chat.type === "private") {
 				await ctx.replyWithHTML(oneLine`
 					Thanks for sharing. I just want to share
 					my transcription of your voice message,
 					just so that you can check if I heard you correctly:
 				` + `\n\n<i>${text}</i>`)
+			} else {
+				await ctx.reply("Okay, I heard you, let me think...")
+			}
 		}
 		else if ("text" in ctx.message) {
 			console.log("Got a text message:", ctx.message.text)
