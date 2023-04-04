@@ -250,7 +250,11 @@ bot.on([message("text"), message("voice")], context => {
 	
 		if ("voice" in ctx.message) {
 			console.log("Got a voice message")
-			await ctx.reply(`Okay, I'm listening...`)
+			await ctx.reply(oneLine`
+				Hey thanks for sharing, just so you know,
+				it will take me some time to process your voice message,
+				so please be patient. 🙏
+			`)
 			const { file_id } = ctx.message.voice
 			const fileLink = await ctx.telegram.getFileLink(file_id)
 			text = await getTranscription(fileLink as URL)
