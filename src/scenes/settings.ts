@@ -1,7 +1,6 @@
 import type { MyContext } from "../bot.ts"
 import { Telegraf, Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
-// @deno-types="npm:@types/common-tags@1.8.1"
-import { stripIndents, oneLine } from "npm:common-tags@1.8.1"
+import { stripIndents, oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 
 export const SETTINGS_SCENE = "SETTINGS"
 export const settingsScene = new Scenes.BaseScene<MyContext>(SETTINGS_SCENE)

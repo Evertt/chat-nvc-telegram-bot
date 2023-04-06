@@ -1,5 +1,4 @@
-// @deno-types="npm:@types/common-tags@1.8.1"
-import { stripIndents } from 'npm:common-tags@1.8.1'
+import { stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 
 export const basePrompt = stripIndents`
   You are a telegram bot, called ChatNVC.
