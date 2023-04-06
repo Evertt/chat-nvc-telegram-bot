@@ -1,6 +1,6 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 
-import { bot, type MyContext } from "./bot.ts"
+import { bot, setupStart, type MyContext } from "./bot.ts"
 import { addMiddlewaresToBot } from "./middleware/add-all-to-bot.ts"
 import { addScenesToBot } from "./scenes/add-all-to-bot.ts"
 import { queue } from "./middleware/session/session.ts"
@@ -250,6 +250,7 @@ bot.on([message("text"), message("voice")], context => {
 	
 		if ("voice" in ctx.message) {
 			console.log("Got a voice message")
+
 			await ctx.reply(oneLine`
 				Hey thanks for sharing, just so you know,
 				it will take me some time to process your voice message,
@@ -502,3 +503,6 @@ bot.launch({ webhook, dropPendingUpdates: true })
 		console.error(error)
 		Deno.exit(1)
 	})
+
+const setupEnd = performance.now()
+console.log(`Setup took ${setupEnd - setupStart}ms.`)

@@ -4,6 +4,7 @@ import { type ContextWithMultiSession, SceneSessionData } from "./middleware/ses
 
 const { TELEGRAM_KEY } = Deno.env.toObject()
 
+export const setupStart = performance.now()
 export interface MyContext extends ContextWithMultiSession {
 	// declare scene type
 	scene: Scenes.SceneContextScene<MyContext, SceneSessionData>

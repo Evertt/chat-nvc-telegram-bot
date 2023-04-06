@@ -7,10 +7,18 @@ export async function getTranscription(voiceLink: URL) {
   const randomFilename = Math.random().toString(36).substring(2)
   const filePath = `${randomFilename}.webm`
 
+  const downloadStart = performance.now()
   const voiceRespFile = await fetch(voiceLink)
+  const downloadEnd = performance.now()
+  console.log(`Downloaded voice file in ${downloadEnd - downloadStart}ms`)
+
+  const convertStart = performance.now()
   const voiceOggBuffer = await voiceRespFile.arrayBuffer()
   const voiceWebmBlob = await convertOggOpusToWebm(voiceOggBuffer)
+  const convertEnd = performance.now()
+  console.log(`Converted voice file in ${convertEnd - convertStart}ms`)
 
+  const transcriptionStart = performance.now()
   const formData = new FormData()
   formData.append("model", "whisper-1")
   formData.append("prompt", "ChatNVC")
@@ -27,6 +35,8 @@ export async function getTranscription(voiceLink: URL) {
       body: formData
     }
   )
+  const transcriptionEnd = performance.now()
+  console.log(`Transcribed voice file in ${transcriptionEnd - transcriptionStart}ms`)
 
   return transcriptionResponse.text()
 }
