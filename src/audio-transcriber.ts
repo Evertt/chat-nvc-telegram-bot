@@ -5,7 +5,7 @@ const { OPENAI_KEY } = Deno.env.toObject()
 
 export async function getTranscription(voiceLink: URL) {
   const randomFilename = Math.random().toString(36).substring(2)
-  const filePath = `${randomFilename}.webm`
+  const filePath = `${randomFilename}.mp3`
 
   const downloadStart = performance.now()
   const voiceRespFile = await fetch(voiceLink)

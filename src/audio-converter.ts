@@ -9,7 +9,10 @@ export const convertOggOpusToWebm = async (opusAudioData: Buffer | ArrayBuffer) 
   const chunks: BlobPart[] = []
 
   const filename = await Deno.makeTempFile({ suffix: '.ogg' })
+  const writeVoiceFileStart = performance.now()
   await Deno.writeFile(filename, buffer)
+  const writeVoiceFileEnd = performance.now()
+  console.log(`Wrote voice file in ${writeVoiceFileEnd - writeVoiceFileStart}ms`)
 
 	const writable = new Writable({
     write(chunk, _, callback) {
@@ -20,9 +23,9 @@ export const convertOggOpusToWebm = async (opusAudioData: Buffer | ArrayBuffer) 
 
   return new Promise<Blob>((resolve, reject) => {
     ffmpeg(filename)
-			.format('webm')
-			.noVideo()
-      .withAudioCodec('copy')
+			.format('mp3')
+			// .noVideo()
+      // .withAudioCodec('copy')
       .on('end', function (err: Error) {
         if (!err) {
           console.log('audio conversion Done')
