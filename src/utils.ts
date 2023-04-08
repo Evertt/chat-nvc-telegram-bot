@@ -283,8 +283,9 @@ export const fetchTranscript = async (transcriptId: string) => {
 
 	if (!resp.ok) {
 		const err = await resp.text()
-		console.error(err)
-		throw new Error(err)
+		console.error("problem fetching transcript", err)
+		return err
+		// throw new Error(err)
 	}
 
 	const { text } = await resp.json() as { text: string }
