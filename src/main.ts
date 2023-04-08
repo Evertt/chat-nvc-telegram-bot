@@ -327,6 +327,12 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 				const url = new URL(req.url!, DOMAIN)
 				const updateId = parseInt(url.searchParams.get("update_id")!)
 				const text = await fetchTranscript(update.transcript_id)
+					.catch(error => console.error(error))
+
+				if (!text) {
+					console.error("No text found for update", updateId)
+					return
+				}
 
 				const ctx = cache.get(updateId)
 
