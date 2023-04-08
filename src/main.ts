@@ -307,47 +307,53 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
       hookPath: "/",
       secretToken: TELEGRAM_WEBBOOK_TOKEN,
 			cb: async (req, res) => {
-				res.statusCode = 200
-				res.end()
+				try {
+					let body = ''
+					// parse each buffer to string and append to body
+					for await (const chunk of req) body += String(chunk)
+					// parse body to object
+					const update = JSON.parse(body) as {
+						status: "completed"
+						transcript_id: string
+					} | { status: "error" }
 
-				let body = ''
-        // parse each buffer to string and append to body
-        for await (const chunk of req) body += String(chunk)
-        // parse body to object
-        const update = JSON.parse(body) as {
-					status: "completed"
-					transcript_id: string
-				} | { status: "error" }
+					if (update.status === "error") {
+						throw ["transcript status error", update]
+					}
 
-				if (update.status === "error") {
-					console.error(update)
-					return
+					const url = new URL(req.url!, DOMAIN)
+					const updateId = parseInt(url.searchParams.get("update_id")!)
+					const text = await fetchTranscript(update.transcript_id)
+
+					if (!text) {
+						console.error("No text found for transcript status update", updateId)
+						return
+					}
+
+					const ctx = cache.get(updateId)
+
+					if (!ctx) {
+						console.error("No context found in cache for update", updateId)
+						return
+					}
+
+					ctx.message.text = text
+
+					const job = (ctx?: Ctx) => handler(ctx!)
+						.then(() => {})
+						.catch(error => {
+							console.error("error using handler", error)
+							throw error
+						})
+						.finally(() => { cache.delete(updateId) })
+					
+					queueMiddleware(ctx, job)
+				} catch (error) {
+					console.error("error", error)
+				} finally {
+					res.statusCode = 200
+					res.end()
 				}
-
-				const url = new URL(req.url!, DOMAIN)
-				const updateId = parseInt(url.searchParams.get("update_id")!)
-				const text = await fetchTranscript(update.transcript_id)
-					.catch(error => console.error(error))
-
-				if (!text) {
-					console.error("No text found for update", updateId)
-					return
-				}
-
-				const ctx = cache.get(updateId)
-
-				if (!ctx) {
-					console.error("No context found for update", updateId)
-					return
-				}
-
-				ctx.message.text = text
-
-				const job = (ctx?: Ctx) => handler(ctx!)
-					.then(() => {})
-					.finally(() => { cache.delete(updateId) })
-				
-				queueMiddleware(ctx, job)
 			}
     }
   : undefined
