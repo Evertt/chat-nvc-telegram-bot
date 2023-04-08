@@ -2,6 +2,7 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 
 import { bot, BOT_NAME, setupStart } from "./bot.ts"
+import { queueMiddleware } from "./middleware/queues.ts"
 import { addMiddlewaresToBot } from "./middleware/add-all-to-bot.ts"
 import { addScenesToBot } from "./scenes/add-all-to-bot.ts"
 
@@ -14,7 +15,8 @@ import {
 	getAssistantResponse,
 	getMessagesFromLastCheckpoint,
 	addNewCheckPointIfNeeded,
-	requestTranscription,
+	requestTranscript,
+	fetchTranscript,
 } from "./utils.ts"
 import { OPENAI_OVERLOADED_MESSAGE } from "./error-messages.ts"
 import { oneLine, oneLineCommaListsAnd, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
@@ -272,7 +274,7 @@ bot.on(message("voice"), async ctx => {
 	cache.set(ctx.update.update_id, ctx as unknown as Ctx)
 	const { file_id } = ctx.message.voice
 	const fileLink = await ctx.telegram.getFileLink(file_id)
-	await requestTranscription(fileLink as URL, ctx.update.update_id)
+	await requestTranscript(fileLink as URL, ctx.update.update_id)
 	console.log("Got a voice message, waiting for transcription...")
 })
 
@@ -305,34 +307,41 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
       hookPath: "/",
       secretToken: TELEGRAM_WEBBOOK_TOKEN,
 			cb: async (req, res) => {
-				console.log("Maybe we got a transcription status update?")
+				res.statusCode = 200
+				res.end()
 
 				let body = ''
         // parse each buffer to string and append to body
         for await (const chunk of req) body += String(chunk)
         // parse body to object
-        const update = JSON.parse(body)
+        const update = JSON.parse(body) as {
+					status: "completed"
+					transcript_id: string
+				} | { status: "error" }
 
-				console.log("update", update)
+				if (update.status === "error") {
+					console.error(update)
+					return
+				}
+
 				const url = new URL(req.url!, DOMAIN)
-				res.statusCode = 200
-				res.end()
-				return
+				const updateId = parseInt(url.searchParams.get("update_id")!)
+				const text = await fetchTranscript(update.transcript_id)
 
-				// const updateIdParam = url.searchParams.get("update_id")
+				const ctx = cache.get(updateId)
 
-				// if (!updateIdParam) {
-				// 	res.statusCode = 403
-				// 	res.end()
-				// 	return
-				// }
+				if (!ctx) {
+					console.error("No context found for update", updateId)
+					return
+				}
 
-				// const updateId = parseInt(updateIdParam)
-				// console.log("updateId", updateId)
-				// console.log("req.body", req.body)
+				ctx.message.text = text
 
-				// res.statusCode = 200
-				// res.end()
+				const job = (ctx?: Ctx) => handler(ctx!)
+					.then(() => {})
+					.finally(() => { cache.delete(updateId) })
+				
+				queueMiddleware(ctx, job)
 			}
     }
   : undefined

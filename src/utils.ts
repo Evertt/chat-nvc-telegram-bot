@@ -250,7 +250,7 @@ export const askAssistant = async (ctx: MyContext, question: string, saveInSessi
 	return answer
 }
 
-export const requestTranscription = async (url: URL, update_id: number) => {
+export const requestTranscript = async (url: URL, update_id: number) => {
 	const resp = await fetch("https://api.assemblyai.com/v2/transcript", {
 		headers: {
 			Authorization: ASSEMBLYAI_KEY,
@@ -273,4 +273,21 @@ export const requestTranscription = async (url: URL, update_id: number) => {
 	const { id } = await resp.json() as { id: string }
 
 	return id
+}
+
+export const fetchTranscript = async (transcriptId: string) => {
+	const resp = await fetch(
+		`https://api.assemblyai.com/v2/transcript/${transcriptId}`,
+		{ headers: { Authorization: ASSEMBLYAI_KEY } }
+	)
+
+	if (!resp.ok) {
+		const err = await resp.text()
+		console.error(err)
+		throw new Error(err)
+	}
+
+	const { text } = await resp.json() as { text: string }
+
+	return text
 }

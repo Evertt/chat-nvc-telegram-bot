@@ -40,7 +40,7 @@ const makeNewChatQueue = () => {
   return queue
 }
 
-export const queueMiddleware: MiddlewareFn<Context> = (ctx, next) => {
+export const queueMiddleware: MiddlewareFn<Context> = (ctx, next: ((ctx?: Context) => Promise<any>)) => {
   if (!ctx.chat) return next()
 
   if (!queues.has(ctx.chat.id)) {
