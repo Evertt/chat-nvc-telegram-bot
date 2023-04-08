@@ -1,11 +1,15 @@
 import type { MyContext } from "../bot.ts"
-import { Telegraf, Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
+import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { stripIndents, oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 
 export const SETTINGS_SCENE = "SETTINGS"
 export const settingsScene = new Scenes.BaseScene<MyContext>(SETTINGS_SCENE)
 
 type SettingsKeys = keyof MyContext["userSession"]["settings"]
+
+type SettingsMenuState = {
+  settingsMessageId?: number
+}
 
 type SettingsMenu = {
   [key in SettingsKeys]: {
@@ -44,13 +48,15 @@ settingsScene.enter(async ctx => {
 
   console.log("currentSettingsChoices", currentSettingsChoices)
 
-  ctx.scene.session.settingsMessageId ??= await ctx
+  const state = ctx.scene.state as SettingsMenuState
+
+  const settingsMessageId = state.settingsMessageId ??= await ctx
     .reply("Loading settings...")
     .then(msg => msg.message_id)
 
   ctx.telegram.editMessageText(
     ctx.chat!.id,
-    ctx.scene.session.settingsMessageId,
+    settingsMessageId,
     undefined,
     stripIndents`
       Welcome to the settings menu.
@@ -97,12 +103,14 @@ settingsScene.action(/.+/, async ctx => {
 })
 
 settingsScene.leave(async ctx => {
+  const state = ctx.scene.state as SettingsMenuState
+
   await ctx.telegram.deleteMessage(
     ctx.chat!.id,
-    ctx.scene.session.settingsMessageId!
+    state.settingsMessageId!
   )
 
-  ctx.scene.session.settingsMessageId = undefined
+  state.settingsMessageId = undefined
 
   await ctx.reply(oneLine`
     Great! Your settings have been saved.
@@ -112,15 +120,3 @@ settingsScene.leave(async ctx => {
     }
   `)
 })
-
-export const addSettingsToBot = <C extends MyContext = MyContext>(bot: Telegraf<C>) => {
-  console.log("Setting up bot scenes...")
-  const stage = new Scenes.Stage<MyContext>([settingsScene], {
-    ttl: 100000,
-  })
-  
-  bot.use(stage.middleware())
-  console.log("Bot scenes set up.")
-  
-  bot.command("settings", ctx => ctx.scene.enter(SETTINGS_SCENE))
-}

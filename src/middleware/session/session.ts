@@ -1,29 +1,17 @@
 // deno-lint-ignore-file no-explicit-any
 import "npm:redis@4.6.5"
-// @deno-types="npm:@types/pg@8.6.6"
-// import pg from "npm:pg@8.10.0"
 import "npm:kysely@0.24.2"
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 import { Scenes } from "npm:telegraf@4.12.3-canary.1"
-import { connect } from "https://deno.land/x/redis@v0.29.2/mod.ts"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.4"
 import { type Context, session } from "npm:telegraf@4.12.3-canary.1"
-// import { type SessionStore } from "npm:@telegraf/session@2.0.0-beta.6/types.d.ts"
-// import { Postgres } from "npm:@telegraf/session@2.0.0-beta.6/pg"
-import { Redis } from "npm:@telegraf/session@2.0.0-beta.6/redis"
 import type { LatestSession } from "./versions/all.ts"
-// import { newLatestSession as defaultSession } from "./versions/all.ts"
 export { sessionVersions } from "./versions/all.ts"
 
 const {
-  REDIS_USERNAME,
-  REDIS_PASSWORD,
-	REDIS_PREFIX = "telegraf:",
-  // SUPERBASE_CONNECTION_STRING,
+  SUPABASE_URL,
+  SUPABASE_KEY,
 } = Deno.env.toObject()
-
-// const pool = new pg.Pool({
-//   connectionString: SUPERBASE_CONNECTION_STRING,
-// })
 
 type Message = LatestSession["messages"][number]
 
@@ -31,7 +19,6 @@ export interface ChatSession {
   messages: Message[]
   storeMessages: boolean
   language_code: string
-  
 }
 
 export interface UserSettings {
@@ -44,12 +31,8 @@ export interface UserSession {
   settings: UserSettings
 }
 
-export type MySceneSessionData = Scenes.SceneSessionData & {
-  settingsMessageId?: number
-}
-
 export interface UserChatSession {
-  __scenes: MySceneSessionData
+  __scenes: Scenes.SceneSessionData
 }
 
 export type SceneSessionData = UserChatSession["__scenes"]
@@ -62,21 +45,60 @@ export type AllMySessions = {
 
 export type ContextWithMultiSession = Context & AllMySessions
 
-const redis = await connect({
-  hostname: "redis-13943.c251.east-us-mz.azure.cloud.redislabs.com",
-  username: REDIS_USERNAME,
-  password: REDIS_PASSWORD,
-  port: 13943,
-})
+const supabase = createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY,
+)
 
-console.log("Instantiating Redis store...")
-const store = Redis<any>({
-	client: redis as any,
-	prefix: REDIS_PREFIX
-})
+// deno-lint-ignore ban-types
+interface AsyncSessionStore<T = object> {
+  get: (key: string) => Promise<T | undefined>;
+  set: (key: string, session: T) => Promise<unknown>;
+  delete: (key: string) => Promise<unknown>;
+}
+
+const supabaseStore: AsyncSessionStore<any> = {
+  async get(id) {
+    const { data, error } = await supabase
+      .from("sessions")
+      .select("session")
+      .eq("id", id)
+      .maybeSingle()
+
+    if (error) {
+      console.error(error)
+      throw error
+    }
+
+    return data.session
+  },
+
+  async set(id, session) {
+    const { error } = await supabase
+      .from("sessions")
+      .upsert({ id, session })
+
+    if (error) {
+      console.error(error)
+      throw error
+    }
+  },
+
+  async delete(key) {
+    const { error } = await supabase
+      .from("sessions")
+      .delete()
+      .eq("id", key)
+
+    if (error) {
+      console.error(error)
+      throw error
+    }
+  },
+}
 
 export const chatSessionMiddleware = session<ChatSession, Context, "chatSession">({
-  store: store as any,
+  store: supabaseStore,
   defaultSession: ctx => ({
     messages: [],
     storeMessages: ctx.chat?.type === "private",
@@ -89,7 +111,7 @@ export const chatSessionMiddleware = session<ChatSession, Context, "chatSession"
 })
 
 export const userSessionMiddleware = session<UserSession, Context, "userSession">({
-  store: store as any,
+  store: supabaseStore,
   defaultSession: () => ({
     haveSpokenBefore: false,
     settings: {
@@ -104,7 +126,7 @@ export const userSessionMiddleware = session<UserSession, Context, "userSession"
 })
 
 export const userChatSession = session<UserChatSession, Context, "session">({
-  store: store as any,
+  store: supabaseStore,
   defaultSession: () => ({
     __scenes: {},
   }),

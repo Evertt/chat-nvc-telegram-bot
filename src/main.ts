@@ -1,40 +1,34 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 
-import { bot, setupStart, type MyContext } from "./bot.ts"
+import { bot, BOT_NAME, setupStart } from "./bot.ts"
 import { addMiddlewaresToBot } from "./middleware/add-all-to-bot.ts"
 import { addScenesToBot } from "./scenes/add-all-to-bot.ts"
 
 import { type Telegraf, Markup } from "npm:telegraf@4.12.3-canary.1"
-import { getTokens } from "./tokenizer.ts"
-// @deno-types="npm:@types/lodash-es@4.17.6"
-import { findLastIndex } from "npm:lodash-es@4.17.21"
 
 import { getTranscription } from "./audio-transcriber.ts"
-import { repeat } from "./utils.ts"
+import {
+	type Message,
+	moderate,
+	askAssistant,
+	getAssistantResponse,
+	getMessagesFromLastCheckpoint,
+	addNewCheckPointIfNeeded,
+} from "./utils.ts"
 import { OPENAI_OVERLOADED_MESSAGE } from "./error-messages.ts"
 import { oneLine, oneLineCommaListsAnd, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
-import { IntroData, getSystemPrompt } from "./system-prompt.ts"
 import type {
-	CreateModerationResponse,
-	CreateChatCompletionRequest,
-	CreateChatCompletionResponse,
 	ChatCompletionRequestMessage,
 } from "npm:openai@3.2.1"
 import { isBotAskingForDonation } from "./donations.ts"
 
-type Message = MyContext["chatSession"]["messages"][number]
-
 const {
-  OPENAI_KEY,
   TELEGRAM_WEBBOOK_TOKEN,
   DOMAIN = "",
   PORT,
 	PAYMENT_TOKEN = "",
 } = Deno.env.toObject()
-
-const BOT_NAME = "ChatNVC"
-const MAX_TOKENS = 3500
 
 addMiddlewaresToBot(bot)
 
@@ -102,119 +96,6 @@ bot.command("donate", async ctx => {
 		]
 	]))
 })
-
-const moderate = async (input: string) => {
-	const moderationRes = await fetch("https://api.openai.com/v1/moderations", {
-		headers: {
-			"Content-Type": "application/json",
-			Authorization: `Bearer ${OPENAI_KEY}`
-		},
-		method: "POST",
-		body: JSON.stringify({ input })
-	})
-
-	const moderationData: CreateModerationResponse = await moderationRes.json()
-	const [results] = moderationData.results
-
-	if (results.flagged) {
-		const categories = Object.entries(results.categories)
-			.filter(([_, value]) => value)
-			.map(([category]) => category)
-
-		return categories
-	}
-
-	return false
-}
-
-const summarize = async (chatMessages: ChatCompletionRequestMessage[]) => {
-	console.log("Trying to get a summary")
-	const summaryMessage = await getAssistantResponse([...chatMessages, {
-		role: "system",
-		content: oneLine`
-			Please summarize the observations, feelings, needs,
-			and possibly requests that the other person
-			(or people, if there were more than one) had in the conversation.
-			If there were any valuable insights in the conversation,
-			you can include those too in the summary.
-		`
-	}])
-	console.log("Got a summary:", summaryMessage.content)
-
-	return summaryMessage
-}
-
-const getMessagesFromLastCheckpoint = (messages: Message[]) => {
-	const i = findLastIndex(messages, message => !!message.checkpoint)
-	return messages.slice(Math.max(i, 0))
-}
-
-const getNamesFromMessages = (messages: Message[]) => {
-	const names = new Set(messages.map(msg => msg.name))
-	names.delete(BOT_NAME)
-	return [...names]
-}
-
-const convertToChatMessages = (messages: Message[], allNames: string[], excludeNames: boolean, request: IntroData["request"] = "translation") => {
-	const chatMessages: ChatCompletionRequestMessage[] = messages.map(msg => (
-		{ role: /chatnvc/i.test(msg.name) ? "assistant" : "user", content: `${excludeNames || msg.name === BOT_NAME ? '' : msg.name + ": "}${msg.message}` }
-	))
-
-	const systemPrompt = getSystemPrompt(
-		{
-			request,
-			names: allNames,
-		},
-		false,
-	)
-
-	chatMessages.unshift({ role: "system", content: systemPrompt })
-
-	return chatMessages
-}
-
-const getTokenCount = (chatMessages: ChatCompletionRequestMessage[]) => {
-	const tokenCount = chatMessages.reduce(
-		(tokenCount, msg) => tokenCount + getTokens(msg.content),
-		0
-	)
-
-	return tokenCount
-}
-
-const addNewCheckPointIfNeeded = async (messages: Message[], excludeNames = false, request: IntroData["request"] = "translation") => {
-	const allNames = getNamesFromMessages(messages)
-	messages = getMessagesFromLastCheckpoint(messages)
-	let chatMessages = convertToChatMessages(messages, allNames, excludeNames, request)
-	let tokenCount = getTokenCount(chatMessages)
-	const lastMessages: Message[] = []
-
-	while (tokenCount >= MAX_TOKENS && messages.length) {
-		lastMessages.unshift(messages.pop()!)
-		chatMessages.pop()
-		tokenCount = getTokenCount(chatMessages)
-	}
-	
-	if (tokenCount >= MAX_TOKENS)
-		throw new Error("Messages too long to summarize")
-
-	if (!lastMessages.length)
-		return { messages, chatMessages }
-	
-	const summary = await summarize(chatMessages)
-	chatMessages = convertToChatMessages(lastMessages, allNames, excludeNames, request)
-	chatMessages.splice(1, 0, summary)
-	
-	const summaryMessage: Message = {
-		type: "text",
-		name: BOT_NAME,
-		message: summary.content,
-		date: Date(),
-		checkpoint: true,
-	}
-
-	return { messages: [summaryMessage, ...lastMessages], chatMessages }
-}
 
 const getReply = async (chatMessages: ChatCompletionRequestMessage[]) => {
 	let moderationResult = await moderate(chatMessages.at(-1)!.content)
@@ -328,29 +209,26 @@ bot.on([message("text"), message("voice")], async ctx => {
 			;({ messages, chatMessages } = await addNewCheckPointIfNeeded(messages, false, "translation"))
 		}
 
-		const stopTyping = repeat(
-			() => ctx.sendChatAction("typing"),
-			5100
-		)
+		return ctx.persistentChatAction(
+			"typing",
+			() => getReply(chatMessages)
+				.then(async reply => {
+					if (ctx.chatSession.storeMessages) {
+						ctx.chatSession.messages.push({
+							type: "text",
+							name: BOT_NAME,
+							message: reply,
+							date: Date(),
+						})
+					}
 
-		return getReply(chatMessages)
-		.then(reply => {
-			if (ctx.chatSession.storeMessages) {
-				ctx.chatSession.messages.push({
-					type: "text",
-					name: BOT_NAME,
-					message: reply,
-					date: Date(),
+					await ctx.reply(reply, { reply_to_message_id: ctx.message.message_id })
 				})
-			}
-
-			return ctx.reply(reply, { reply_to_message_id: ctx.message.message_id })
-		})
-		.catch(error => {
-			console.error(error)
-			return ctx.reply(OPENAI_OVERLOADED_MESSAGE)
-		})
-		.finally(stopTyping)
+				.catch(async error => {
+					console.error(error)
+					await ctx.reply(OPENAI_OVERLOADED_MESSAGE)
+				})
+		)
 	}
 
 	({ messages, chatMessages } = await addNewCheckPointIfNeeded(
@@ -426,40 +304,6 @@ bot.action(/donate_(\d+)/, async ctx => {
 	await ctx.answerCbQuery(`Thank you for your donation of $${donationAmount}!`)
 	await ctx.deleteMessage()
 })
-
-async function getAssistantResponse(chatMessages: ChatCompletionRequestMessage[]) {
-  const chatRequestOpts: CreateChatCompletionRequest = {
-    model: "gpt-3.5-turbo",
-    temperature: 0.9,
-    messages: chatMessages,
-  }
-
-  const chatResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-    headers: {
-      Authorization: `Bearer ${OPENAI_KEY}`,
-      "Content-Type": "application/json"
-    },
-    method: "POST",
-    body: JSON.stringify(chatRequestOpts)
-  })
-
-  if(!chatResponse.ok) {
-    const err = await chatResponse.text()
-    throw new Error(err)
-  }
-
-	const completionResponse = await chatResponse.json() as CreateChatCompletionResponse
-	const assistantMessage = completionResponse.choices[0]?.message
-
-	if (!assistantMessage) {
-		throw new Error("OpenAI returned an empty response")
-	}
-
-	assistantMessage.content = assistantMessage.content
-		.replace(/^chatnvc\w*: /i, "")
-
-  return assistantMessage
-}
 
 const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
   ? {

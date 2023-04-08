@@ -23,3 +23,5 @@ export function getTokens(input?: string): number {
 	const tokens = tokenizer.encode(input)
 	return tokens.text.length
 }
+
+export const MAX_TOKENS = 3500
