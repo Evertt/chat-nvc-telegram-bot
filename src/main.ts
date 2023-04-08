@@ -304,14 +304,15 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
       port: +PORT,
       hookPath: "/",
       secretToken: TELEGRAM_WEBBOOK_TOKEN,
-			cb: (req, res) => {
+			cb: (req: any, res) => {
 				console.log("Maybe we got a transcription status update?")
-				console.log("req", req)
+				console.log("req.body", req.body)
+				const url = new URL(req.url!, DOMAIN)
 				res.statusCode = 200
 				res.end()
 				return
 
-				// const updateIdParam = new URL(req.url!).searchParams.get("update_id")
+				// const updateIdParam = url.searchParams.get("update_id")
 
 				// if (!updateIdParam) {
 				// 	res.statusCode = 403
