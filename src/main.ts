@@ -304,9 +304,16 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
       port: +PORT,
       hookPath: "/",
       secretToken: TELEGRAM_WEBBOOK_TOKEN,
-			cb: (req: any, res) => {
+			cb: async (req, res) => {
 				console.log("Maybe we got a transcription status update?")
-				console.log("req.body", req.body)
+
+				let body = ''
+        // parse each buffer to string and append to body
+        for await (const chunk of req) body += String(chunk)
+        // parse body to object
+        const update = JSON.parse(body)
+
+				console.log("update", update)
 				const url = new URL(req.url!, DOMAIN)
 				res.statusCode = 200
 				res.end()
