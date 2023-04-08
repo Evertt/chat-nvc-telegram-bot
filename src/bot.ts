@@ -24,9 +24,3 @@ bot.telegram.setMyCommands([
 	// { command: "donate", description: "Donate to me" },
 	// { command: "asklocation", description: "Let me ask for your location" },
 ])
-
-bot.telegram.setChatMenuButton({
-	menuButton: {
-		type: "default",
-	}
-})

@@ -1,3 +1,4 @@
+// deno-lint-ignore-file ban-types
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 
 import { bot, BOT_NAME, setupStart } from "./bot.ts"
@@ -10,10 +11,10 @@ import { getTranscription } from "./audio-transcriber.ts"
 import {
 	type Message,
 	moderate,
-	askAssistant,
 	getAssistantResponse,
 	getMessagesFromLastCheckpoint,
 	addNewCheckPointIfNeeded,
+	requestTranscription,
 } from "./utils.ts"
 import { OPENAI_OVERLOADED_MESSAGE } from "./error-messages.ts"
 import { oneLine, oneLineCommaListsAnd, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
@@ -118,42 +119,19 @@ const getReply = async (chatMessages: ChatCompletionRequestMessage[]) => {
 	return assistantResponse.content
 }
 
-bot.on([message("text"), message("voice")], async ctx => {
+// @ts-expect-error trust me
+type Ctx = Parameters<Extract<Parameters<typeof bot.on<"text">>[1], Function>>[0]
+const cache = new Map<number, Ctx>()
+
+const handler = async (ctx: Ctx) => {
 	if (ctx.chat.type === "supergroup") return
 
 	const chatIsPrivate = ctx.chat.type === "private"
 
-	let text = ''
-
-	if ("voice" in ctx.message) {
-		console.log("Got a voice message")
-
-		await ctx.reply(oneLine`
-			Hey thanks for sharing, just so you know,
-			it will take me some time to process your voice message,
-			so please be patient. 🙏
-		`)
-		const { file_id } = ctx.message.voice
-		const fileLink = await ctx.telegram.getFileLink(file_id)
-		text = await getTranscription(fileLink as URL)
-
-		if (ctx.userSession.settings.receiveVoiceTranscriptions && ctx.chat.type === "private") {
-			await ctx.replyWithHTML(oneLine`
-				Thanks for sharing. I just want to share
-				my transcription of your voice message,
-				just so that you can check if I heard you correctly:
-			` + `\n\n<i>${text}</i>`)
-		} else {
-			await ctx.reply("Okay, I heard you, let me think...")
-		}
-	}
-	else if ("text" in ctx.message) {
-		console.log("Got a text message:", ctx.message.text)
-		text = ctx.message.text
-	}
+	const { text } = ctx.message
 
 	const lastMessage: Message = {
-		type: "text" in ctx.message ? "text" : "voice",
+		type: "voice" in ctx.message ? "voice" : "text",
 		name: ctx.from.first_name,
 		message: text,
 		date: Date(),
@@ -168,9 +146,9 @@ bot.on([message("text"), message("voice")], async ctx => {
 	let chatMessages: ChatCompletionRequestMessage[] = []
 
 	if (!chatIsPrivate) {
-		const wasMentioned = "text" in ctx.message
-			? ctx.message.text.includes(`@${ctx.me}`)
-			: text.includes(BOT_NAME)
+		const wasMentioned = "voice" in ctx.message
+			? text.includes(BOT_NAME)
+			: ctx.message.text.includes(`@${ctx.me}`)
 
 		const reply = ctx.message.reply_to_message
 
@@ -281,6 +259,21 @@ bot.on([message("text"), message("voice")], async ctx => {
 			)
 		})
 	)
+}
+
+bot.on("text", handler)
+bot.on(message("voice"), async ctx => {
+	await ctx.reply(oneLine`
+		I'm trying out a new transcription service,
+		it may not even work.
+		You'll see if you get a response within a few minutes or not.
+	`)
+
+	cache.set(ctx.update.update_id, ctx as unknown as Ctx)
+	const { file_id } = ctx.message.voice
+	const fileLink = await ctx.telegram.getFileLink(file_id)
+	await requestTranscription(fileLink as URL, ctx.update.update_id)
+	console.log("Got a voice message, waiting for transcription...")
 })
 
 bot.action("no_donation", ctx =>
@@ -311,6 +304,28 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
       port: +PORT,
       hookPath: "/",
       secretToken: TELEGRAM_WEBBOOK_TOKEN,
+			cb: (req, res) => {
+				console.log("Maybe we got a transcription status update?")
+				console.log("req", req)
+				res.statusCode = 200
+				res.end()
+				return
+
+				// const updateIdParam = new URL(req.url!).searchParams.get("update_id")
+
+				// if (!updateIdParam) {
+				// 	res.statusCode = 403
+				// 	res.end()
+				// 	return
+				// }
+
+				// const updateId = parseInt(updateIdParam)
+				// console.log("updateId", updateId)
+				// console.log("req.body", req.body)
+
+				// res.statusCode = 200
+				// res.end()
+			}
     }
   : undefined
 

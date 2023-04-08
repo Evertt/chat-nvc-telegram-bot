@@ -17,7 +17,7 @@ import { oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 
 export type Message = MyContext["chatSession"]["messages"][number]
 
-const { OPENAI_KEY } = Deno.env.toObject()
+const { OPENAI_KEY, ASSEMBLYAI_KEY, DOMAIN } = Deno.env.toObject()
 
 export type Modify<T, K> = Omit<T, keyof K> & ConditionalExcept<K, undefined>
 
@@ -248,4 +248,29 @@ export const askAssistant = async (ctx: MyContext, question: string, saveInSessi
 	}
 
 	return answer
+}
+
+export const requestTranscription = async (url: URL, update_id: number) => {
+	const resp = await fetch("https://api.assemblyai.com/v2/transcript", {
+		headers: {
+			Authorization: ASSEMBLYAI_KEY,
+			"Content-Type": "application/json"
+		},
+		method: "POST",
+		body: JSON.stringify({
+			audio_url: url.toString(),
+			language_detection: true,
+			webhook_url: `${DOMAIN}/?update_id=${update_id}`
+		})
+	})
+
+	if (!resp.ok) {
+		const err = await resp.text()
+		console.error(err)
+		throw new Error(err)
+	}
+
+	const { id } = await resp.json() as { id: string }
+
+	return id
 }

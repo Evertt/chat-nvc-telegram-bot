@@ -76,7 +76,10 @@ const supabaseStore: AsyncSessionStore<any> = {
   async set(id, session) {
     const { error } = await supabase
       .from("sessions")
-      .upsert({ id, session })
+      .upsert({
+        id, session,
+        updated_at: new Date()
+      })
 
     if (error) {
       console.error(error)
