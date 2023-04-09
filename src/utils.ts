@@ -298,4 +298,4 @@ export const fetchTranscript = async (transcriptId: string) => {
 	return text
 }
 
-export const roundToSeconds = (time: number) => Math.round(time * 1000) / 1000
+export const roundToSeconds = (time: number) => Math.round(time / 10) / 100

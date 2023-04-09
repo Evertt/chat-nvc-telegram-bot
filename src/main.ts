@@ -4,12 +4,11 @@ import "./cycle.js"
 
 // import * as http from "node:http"
 import { bot, BOT_NAME, setupStart } from "./bot.ts"
-import { queueMiddleware } from "./middleware/queues.ts"
 import { addMiddlewaresToBot } from "./middleware/add-all-to-bot.ts"
 import { addScenesToBot } from "./scenes/add-all-to-bot.ts"
 import { supabaseStore } from "./middleware/session/session.ts"
 
-import { type Telegraf, Markup, Context } from "npm:telegraf@4.12.3-canary.1"
+import { type Telegraf, Markup } from "npm:telegraf@4.12.3-canary.1"
 
 import { getTranscription } from "./audio-transcriber.ts"
 import {
@@ -351,7 +350,7 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 					}
 
 					const transcriptionEnd = performance.now()
-					const transcriptionTime = `${roundToSeconds((transcriptionEnd - transcriptionStart))} seconds`
+					const transcriptionTime = `${roundToSeconds(transcriptionEnd - transcriptionStart)} seconds`
 					await bot.telegram.sendMessage(ctx.update.message.chat.id, oneLine`
 						All in all, it took ${transcriptionTime} to transcribe your voice message.
 						One thing to note though, is that the service has a start-up time of about 15 to 25 seconds,
