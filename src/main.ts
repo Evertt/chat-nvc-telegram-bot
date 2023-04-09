@@ -276,7 +276,7 @@ bot.on(message("voice"), async ctx => {
 	const { file_id } = ctx.message.voice
 	const fileLink = await ctx.telegram.getFileLink(file_id)
 	const transcribeStart = performance.now()
-	supabaseStore.set(`paused-update:${ctx.update.update_id}`, [ transcribeStart, ctx as unknown as Ctx ])
+	supabaseStore.set(`paused-update:${ctx.update.update_id}`, [ transcribeStart, { ...ctx as unknown as Ctx }])
 	await requestTranscript(fileLink as URL, ctx.update.update_id)
 	console.log("Got a voice message, waiting for transcription...")
 })
