@@ -1,13 +1,13 @@
 import { Telegraf, Scenes } from "npm:telegraf@4.12.3-canary.1"
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-import { type ContextWithMultiSession, SceneSessionData } from "./middleware/session/session.ts"
+import { type SceneSessionData, ContextWithMultiSession } from "./middleware/session/session.ts"
 
 const { TELEGRAM_KEY } = Deno.env.toObject()
 
 export const BOT_NAME = "ChatNVC"
 
 export const setupStart = performance.now()
-export interface MyContext extends ContextWithMultiSession {
+export type MyContext = ContextWithMultiSession & {
 	// declare scene type
 	scene: Scenes.SceneContextScene<MyContext, SceneSessionData>
 }

@@ -7,6 +7,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.4"
 import { type Context, session } from "npm:telegraf@4.12.3-canary.1"
 import type { LatestSession } from "./versions/all.ts"
 export { sessionVersions } from "./versions/all.ts"
+import type { MyContext } from "../../bot.ts"
+import { type Update } from "npm:telegraf@4.12.3-canary.1/types"
 
 const {
   SUPABASE_URL,
@@ -19,6 +21,7 @@ export interface ChatSession {
   messages: Message[]
   storeMessages: boolean
   language_code: string
+  pausedUpdates: Map<number, {start: number, ctx: MyContext}>
 }
 
 export interface UserSettings {
@@ -43,7 +46,7 @@ export type AllMySessions = {
   session: UserChatSession,
 }
 
-export type ContextWithMultiSession = Context & AllMySessions
+export type ContextWithMultiSession<C extends Context = Context> = C & AllMySessions
 
 const supabase = createClient(
   SUPABASE_URL,
@@ -100,12 +103,13 @@ const supabaseStore: AsyncSessionStore<any> = {
   },
 }
 
-export const chatSessionMiddleware = session<ChatSession, Context, "chatSession">({
+export const chatSessionMiddleware = session<ChatSession, MyContext, "chatSession">({
   store: supabaseStore,
   defaultSession: ctx => ({
     messages: [],
     storeMessages: ctx.chat?.type === "private",
     language_code: ctx.chat?.type !== "private" ? "en" : ctx.from?.language_code ?? "en",
+    pausedUpdates: new Map(),
   }),
   getSessionKey: ctx => Promise.resolve(
     ctx.chat ? `chat:${ctx.chat.id}` : undefined
@@ -113,7 +117,7 @@ export const chatSessionMiddleware = session<ChatSession, Context, "chatSession"
   property: "chatSession",
 })
 
-export const userSessionMiddleware = session<UserSession, Context, "userSession">({
+export const userSessionMiddleware = session<UserSession, MyContext, "userSession">({
   store: supabaseStore,
   defaultSession: () => ({
     haveSpokenBefore: false,
@@ -128,7 +132,7 @@ export const userSessionMiddleware = session<UserSession, Context, "userSession"
   property: "userSession",
 })
 
-export const userChatSession = session<UserChatSession, Context, "session">({
+export const userChatSession = session<UserChatSession, MyContext, "session">({
   store: supabaseStore,
   defaultSession: () => ({
     __scenes: {},

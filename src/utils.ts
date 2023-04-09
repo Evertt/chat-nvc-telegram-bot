@@ -1,7 +1,7 @@
 // deno-lint-ignore-file
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 import type { ConditionalExcept } from "npm:type-fest@3.6.1"
-import type { Context } from "npm:telegraf@4.12.3-canary.1"
+// import type { Context } from "npm:telegraf@4.12.3-canary.1"
 import type {
 	CreateModerationResponse,
 	CreateChatCompletionRequest,
