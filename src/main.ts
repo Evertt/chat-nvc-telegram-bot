@@ -1,6 +1,7 @@
 // deno-lint-ignore-file ban-types
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 
+// import * as http from "node:http"
 import { bot, BOT_NAME, setupStart } from "./bot.ts"
 import { queueMiddleware } from "./middleware/queues.ts"
 import { addMiddlewaresToBot } from "./middleware/add-all-to-bot.ts"
@@ -307,6 +308,9 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
       hookPath: "/",
       secretToken: TELEGRAM_WEBBOOK_TOKEN,
 			cb: async (req, res) => {
+				const url = new URL(req.url!, DOMAIN)
+				const updateId = parseInt(url.searchParams.get("update_id")!)
+
 				try {
 					let body = ''
 					// parse each buffer to string and append to body
@@ -321,8 +325,6 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 						throw ["transcript status error", update]
 					}
 
-					const url = new URL(req.url!, DOMAIN)
-					const updateId = parseInt(url.searchParams.get("update_id")!)
 					const text = await fetchTranscript(update.transcript_id)
 
 					if (!text) {
@@ -339,18 +341,13 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 
 					ctx.message.text = text
 
-					const job = (ctx?: Ctx) => handler(ctx!)
-						.then(() => {})
-						.catch(error => {
-							console.error("error using handler", error)
-							throw error
-						})
-						.finally(() => { cache.delete(updateId) })
-					
+					const job = (ctx?: Ctx) => bot.handleUpdate(ctx!.update)
+
 					queueMiddleware(ctx, job)
 				} catch (error) {
 					console.error("error", error)
 				} finally {
+					cache.delete(updateId)
 					res.statusCode = 200
 					res.end()
 				}

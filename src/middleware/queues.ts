@@ -41,15 +41,15 @@ const makeNewChatQueue = () => {
   return queue
 }
 
-export const queueMiddleware: MiddlewareFn<Context> = (ctx, next: ((ctx?: Context) => Promise<any>)) => {
-  if (!ctx.chat) return next()
+export const queueMiddleware = <C extends Context = Context>(update: C, next: ((ctx?: C) => Promise<any>)) => {
+  if (!update.chat) return next()
 
-  if (!queues.has(ctx.chat.id)) {
-    queues.set(ctx.chat.id, makeNewChatQueue())
-    log(`new queue created for chat: ${ctx.chat.id}`)
+  if (!queues.has(update.chat.id)) {
+    queues.set(update.chat.id, makeNewChatQueue())
+    log(`new queue created for chat: ${update.chat.id}`)
   }
 
-  const chatQueue = queues.get(ctx.chat.id)!
-  chatQueue.push(next, ctx)
+  const chatQueue = queues.get(update.chat.id)!
+  chatQueue.push(next, update)
   log("return immediately")
 }
