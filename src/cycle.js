@@ -26,8 +26,8 @@
 const stringify = JSON.stringify.bind(JSON)
 const parse = JSON.parse.bind(JSON)
 
-if (JSON.stringify.name !== "decycle") {
-  JSON.stringify = function decycle(object, replacer) {
+if (typeof JSON.decycle !== "function") {
+  JSON.decycle = function decycle(object, replacer) {
       "use strict";
 
 // Make a deep copy of an object or array, assuring that there is at most
@@ -121,11 +121,13 @@ if (JSON.stringify.name !== "decycle") {
 
       return stringify(decycled);
   };
+
+  JSON.stringify = (object, replacer) => stringify(JSON.decycle(object, replacer))
 }
 
 
-if (JSON.parse.name !== "retrocycle") {
-  JSON.parse = function retrocycle($) {
+if (typeof JSON.retrocycle !== "function") {
+  JSON.retrocycle = function retrocycle($) {
       "use strict";
 
 // Restore an object that was reduced by decycle. Members whose values are
@@ -149,7 +151,7 @@ if (JSON.parse.name !== "retrocycle") {
 
       const px = /^\$(?:\[(?:\d+|"(?:[^\\"\u0000-\u001f]|\\(?:[\\"\/bfnrt]|u[0-9a-zA-Z]{4}))*")\])*$/;
 
-      const retrocycled = (function rez(value) {
+      return (function rez(value) {
 
 // The rez function walks recursively through the object looking for $ref
 // properties. When it finds one that has a value that is a path, then it
@@ -183,7 +185,7 @@ if (JSON.parse.name !== "retrocycle") {
               }
           }
       }($));
-
-      return retrocycled(parse($));
   };
+
+  JSON.parse = (string, reviver) => JSON.retrocycle(parse(string, reviver))
 }
