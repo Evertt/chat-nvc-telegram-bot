@@ -350,11 +350,9 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 						return
 					}
 
-					console.log("ctx", ctx)
-
 					const transcriptionEnd = performance.now()
 					const transcriptionTime = `${roundToSeconds((transcriptionEnd - transcriptionStart))} seconds`
-					await bot.telegram.sendMessage(ctx.chat.id, oneLine`
+					await bot.telegram.sendMessage(ctx.message.chat.id, oneLine`
 						All in all, it took ${transcriptionTime} to transcribe your voice message.
 						One thing to note though, is that the service has a start-up time of about 15 to 25 seconds,
 						regardless of the duration of the voice message.
