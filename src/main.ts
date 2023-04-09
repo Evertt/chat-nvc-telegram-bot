@@ -18,6 +18,7 @@ import {
 	addNewCheckPointIfNeeded,
 	requestTranscript,
 	fetchTranscript,
+	roundToSeconds,
 } from "./utils.ts"
 import { OPENAI_OVERLOADED_MESSAGE } from "./error-messages.ts"
 import { oneLine, oneLineCommaListsAnd, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
@@ -124,7 +125,8 @@ const getReply = async (chatMessages: ChatCompletionRequestMessage[]) => {
 
 // @ts-expect-error trust me
 type Ctx = Parameters<Extract<Parameters<typeof bot.on<"text">>[1], Function>>[0]
-const cache = new Map<number, Ctx>()
+type Timestamp = number
+const cache = new Map<number, [Timestamp, Ctx]>()
 
 const handler = async (ctx: Ctx) => {
 	if (ctx.chat.type === "supergroup") return
@@ -272,9 +274,10 @@ bot.on(message("voice"), async ctx => {
 		You'll see if you get a response within a few minutes or not.
 	`)
 
-	cache.set(ctx.update.update_id, ctx as unknown as Ctx)
 	const { file_id } = ctx.message.voice
 	const fileLink = await ctx.telegram.getFileLink(file_id)
+	const transcribeStart = performance.now()
+	cache.set(ctx.update.update_id, [ transcribeStart, ctx as unknown as Ctx ])
 	await requestTranscript(fileLink as URL, ctx.update.update_id)
 	console.log("Got a voice message, waiting for transcription...")
 })
@@ -332,13 +335,15 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 						return
 					}
 
-					const ctx = cache.get(updateId)
+					const [transcriptionStart, ctx] = cache.get(updateId) ?? []
 
-					if (!ctx) {
+					if (!ctx || !transcriptionStart) {
 						console.error("No context found in cache for update", updateId)
 						return
 					}
 
+					const transcriptionEnd = performance.now()
+					console.log(`Transcribed voice file in ${roundToSeconds((transcriptionEnd - transcriptionStart))} seconds`)
 					ctx.message.text = text
 
 					const job = (ctx?: Ctx) => bot.handleUpdate(ctx!.update)
@@ -374,4 +379,4 @@ bot.launch({ webhook, dropPendingUpdates: true })
 	})
 
 const setupEnd = performance.now()
-console.log(`Setup took ${setupEnd - setupStart}ms.`)
+console.log(`Setup took ${roundToSeconds(setupEnd - setupStart)} seconds.`)

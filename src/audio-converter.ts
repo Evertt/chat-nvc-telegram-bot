@@ -1,6 +1,7 @@
 import ffmpeg from 'npm:fluent-ffmpeg@2.1.2'
 import { Writable } from "node:stream"
 import { Buffer } from "node:buffer"
+import { roundToSeconds } from "./utils.ts";
 
 export const convertOggOpusToWebm = async (opusAudioData: Buffer | ArrayBuffer) => {
   const buffer = opusAudioData instanceof Buffer
@@ -12,7 +13,7 @@ export const convertOggOpusToWebm = async (opusAudioData: Buffer | ArrayBuffer) 
   const writeVoiceFileStart = performance.now()
   await Deno.writeFile(filename, buffer)
   const writeVoiceFileEnd = performance.now()
-  console.log(`Wrote voice file in ${writeVoiceFileEnd - writeVoiceFileStart}ms`)
+  console.log(`Wrote voice file in ${roundToSeconds(writeVoiceFileEnd - writeVoiceFileStart)} seconds`)
 
 	const writable = new Writable({
     write(chunk, _, callback) {

@@ -1,5 +1,6 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 import { convertOggOpusToWebm } from "./audio-converter.ts"
+import { roundToSeconds } from "./utils.ts"
 
 const { OPENAI_KEY } = Deno.env.toObject()
 
@@ -10,13 +11,13 @@ export async function getTranscription(voiceLink: URL) {
   const downloadStart = performance.now()
   const voiceRespFile = await fetch(voiceLink)
   const downloadEnd = performance.now()
-  console.log(`Downloaded voice file in ${downloadEnd - downloadStart}ms`)
+  console.log(`Downloaded voice file in ${roundToSeconds(downloadEnd - downloadStart)} seconds`)
 
   const convertStart = performance.now()
   const voiceOggBuffer = await voiceRespFile.arrayBuffer()
   const voiceWebmBlob = await convertOggOpusToWebm(voiceOggBuffer)
   const convertEnd = performance.now()
-  console.log(`Converted voice file in ${convertEnd - convertStart}ms`)
+  console.log(`Converted voice file in ${roundToSeconds(convertEnd - convertStart)} seconds`)
 
   const transcriptionStart = performance.now()
   const formData = new FormData()
@@ -36,7 +37,7 @@ export async function getTranscription(voiceLink: URL) {
     }
   )
   const transcriptionEnd = performance.now()
-  console.log(`Transcribed voice file in ${transcriptionEnd - transcriptionStart}ms`)
+  console.log(`Transcribed voice file in ${roundToSeconds(transcriptionEnd - transcriptionStart)} seconds`)
 
   return transcriptionResponse.text()
 }
