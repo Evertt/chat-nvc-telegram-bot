@@ -23,8 +23,8 @@
     retrocycle, set, stringify, test
 */
 
-const stringify = JSON.stringify.bind(JSON)
-const parse = JSON.parse.bind(JSON)
+const stringify = JSON.stringify
+const parse = JSON.parse
 
 if (typeof JSON.decycle !== "function") {
   JSON.decycle = function decycle(object, replacer) {
