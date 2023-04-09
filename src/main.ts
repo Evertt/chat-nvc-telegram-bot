@@ -342,13 +342,15 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 						transcriptionStart: number,
 						ctx: Ctx
 					] = JSON.retrocycle(await supabaseStore.get(`paused-update:${updateId}`))
-					
+
 					const [transcriptionStart, ctx] = pausedUpdate ?? []
 
 					if (!ctx || !transcriptionStart) {
 						console.error("No context found in cache for update", { updateId, ctx, transcriptionStart })
 						return
 					}
+
+					console.log("ctx", ctx)
 
 					const transcriptionEnd = performance.now()
 					const transcriptionTime = `${roundToSeconds((transcriptionEnd - transcriptionStart))} seconds`
