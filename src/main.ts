@@ -1,5 +1,6 @@
 // deno-lint-ignore-file ban-types
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
+import "./cycle.js"
 
 // import * as http from "node:http"
 import { bot, BOT_NAME, setupStart } from "./bot.ts"
