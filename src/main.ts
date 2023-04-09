@@ -268,9 +268,10 @@ const handler = async (ctx: Ctx) => {
 bot.on("text", handler)
 bot.on(message("voice"), async ctx => {
 	await ctx.reply(oneLine`
-		I'm trying out a new transcription service,
-		so it may not work all the time, but it's supposed to be faster than what I was using before.
-		I hope you'll understand, I'm trying my best to make this bot better and better.
+		Thanks for sharing your voice message. Just to let you know,
+		I'm currently transcribing it, so I can read it, and that
+		takes me at the very least 30 seconds.
+		But I'll get back to you as soon as I can.
 	`)
 
 	const { file_id } = ctx.message.voice
@@ -351,14 +352,14 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 
 					const transcriptionEnd = performance.now()
 					const transcriptionTime = `${roundToSeconds(transcriptionEnd - transcriptionStart)} seconds`
-					await bot.telegram.sendMessage(ctx.update.message.chat.id, oneLine`
-						All in all, it took ${transcriptionTime} to transcribe your voice message.
-						One thing to note though, is that the service has a start-up time of about 15 to 25 seconds,
-						regardless of the duration of the voice message.
-						But after that, it can transcribe voice messages around 3 to 6 times faster
-						than the duration of the message. So longer voice messages will "feel" faster to transcribe.
-						Maybe it's good to know that the voice message must be longer than 160 ms and shorter than 10 hours.
-					`)
+					// await bot.telegram.sendMessage(ctx.update.message.chat.id, oneLine`
+					// 	All in all, it took ${transcriptionTime} to transcribe your voice message.
+					// 	One thing to note though, is that the service has a start-up time of about 15 to 25 seconds,
+					// 	regardless of the duration of the voice message.
+					// 	But after that, it can transcribe voice messages around 3 to 6 times faster
+					// 	than the duration of the message. So longer voice messages will "feel" faster to transcribe.
+					// 	Maybe it's good to know that the voice message must be longer than 160 ms and shorter than 10 hours.
+					// `)
 					console.log(`Transcribed voice file in ${transcriptionTime}`)
 					ctx.update.message.text = text
 

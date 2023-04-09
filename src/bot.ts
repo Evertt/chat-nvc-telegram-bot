@@ -21,6 +21,7 @@ bot.telegram.setMyCommands([
 	{ command: "start", description: "Clear my memory, start with a brand new empathy session" },
 	{ command: "help", description: "See some extra information" },
 	{ command: "settings", description: "View and change your settings" },
+	{ command: "role_play", description: "We can do a role play" },
 	// { command: "donate", description: "Donate to me" },
 	// { command: "asklocation", description: "Let me ask for your location" },
 ])
