@@ -342,15 +342,13 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 						transcriptionStart: number,
 						ctx: Ctx
 					] = JSON.retrocycle(await supabaseStore.get(`paused-update:${updateId}`))
-					// deno-lint-ignore prefer-const
-					let [transcriptionStart, ctx] = pausedUpdate ?? []
+					
+					const [transcriptionStart, ctx] = pausedUpdate ?? []
 
 					if (!ctx || !transcriptionStart) {
 						console.error("No context found in cache for update", { updateId, ctx, transcriptionStart })
 						return
 					}
-
-					ctx = new Context(ctx.update, ctx.telegram, me) as Ctx
 
 					const transcriptionEnd = performance.now()
 					const transcriptionTime = `${roundToSeconds((transcriptionEnd - transcriptionStart))} seconds`
@@ -365,7 +363,7 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 					console.log(`Transcribed voice file in ${transcriptionTime}`)
 					ctx.update.message.text = text
 
-					bot.handleUpdate(ctx.update)
+					await bot.handleUpdate(ctx.update)
 				} catch (error) {
 					console.error("error", error)
 				} finally {
