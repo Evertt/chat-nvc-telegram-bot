@@ -9,7 +9,7 @@ import { addMiddlewaresToBot } from "./middleware/add-all-to-bot.ts"
 import { addScenesToBot } from "./scenes/add-all-to-bot.ts"
 import { supabaseStore } from "./middleware/session/session.ts"
 
-import { type Telegraf, Markup } from "npm:telegraf@4.12.3-canary.1"
+import { type Telegraf, Markup, Context } from "npm:telegraf@4.12.3-canary.1"
 
 import { getTranscription } from "./audio-transcriber.ts"
 import {
@@ -342,16 +342,19 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 						transcriptionStart: number,
 						ctx: Ctx
 					] = JSON.retrocycle(await supabaseStore.get(`paused-update:${updateId}`))
-					const [transcriptionStart, ctx] = pausedUpdate ?? []
+					// deno-lint-ignore prefer-const
+					let [transcriptionStart, ctx] = pausedUpdate ?? []
 
 					if (!ctx || !transcriptionStart) {
 						console.error("No context found in cache for update", { updateId, ctx, transcriptionStart })
 						return
 					}
 
+					ctx = new Context(ctx.update, ctx.telegram, me) as Ctx
+
 					const transcriptionEnd = performance.now()
 					const transcriptionTime = `${roundToSeconds((transcriptionEnd - transcriptionStart))} seconds`
-					await ctx.reply(oneLine`
+					await bot.telegram.sendMessage(ctx.chat.id, oneLine`
 						All in all, it took ${transcriptionTime} to transcribe your voice message.
 						One thing to note though, is that the service has a start-up time of about 15 to 25 seconds,
 						regardless of the duration of the voice message.
@@ -360,11 +363,9 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 						Maybe it's good to know that the voice message must be longer than 160 ms and shorter than 10 hours.
 					`)
 					console.log(`Transcribed voice file in ${transcriptionTime}`)
-					ctx.message.text = text
+					ctx.update.message.text = text
 
-					const job = (ctx?: Ctx) => bot.handleUpdate(ctx!.update)
-
-					queueMiddleware(ctx, job)
+					bot.handleUpdate(ctx.update)
 				} catch (error) {
 					console.error("error", error)
 				} finally {
