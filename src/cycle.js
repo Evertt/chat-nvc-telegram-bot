@@ -23,6 +23,9 @@
     retrocycle, set, stringify, test
 */
 
+const stringify = JSON.stringify.bind(JSON)
+const parse = JSON.parse.bind(JSON)
+
 if (JSON.stringify.name !== "decycle") {
   JSON.stringify = function decycle(object, replacer) {
       "use strict";
@@ -53,7 +56,7 @@ if (JSON.stringify.name !== "decycle") {
 
       const objects = new WeakMap();     // object to path mappings
 
-      return (function derez(value, path) {
+      const decycled = (function derez(value, path) {
 
 // The derez function recurses through the object, producing the deep copy.
 
@@ -107,7 +110,7 @@ if (JSON.stringify.name !== "decycle") {
                   Object.keys(value).forEach(function (name) {
                       nu[name] = derez(
                           value[name],
-                          path + "[" + JSON.stringify(name) + "]"
+                          path + "[" + stringify(name) + "]"
                       );
                   });
               }
@@ -115,6 +118,8 @@ if (JSON.stringify.name !== "decycle") {
           }
           return value;
       }(object, "$"));
+
+      return stringify(decycled);
   };
 }
 
@@ -144,7 +149,7 @@ if (JSON.parse.name !== "retrocycle") {
 
       const px = /^\$(?:\[(?:\d+|"(?:[^\\"\u0000-\u001f]|\\(?:[\\"\/bfnrt]|u[0-9a-zA-Z]{4}))*")\])*$/;
 
-      (function rez(value) {
+      const retrocycled = (function rez(value) {
 
 // The rez function walks recursively through the object looking for $ref
 // properties. When it finds one that has a value that is a path, then it
@@ -178,6 +183,7 @@ if (JSON.parse.name !== "retrocycle") {
               }
           }
       }($));
-      return $;
+
+      return parse($);
   };
 }
