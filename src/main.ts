@@ -6,6 +6,7 @@ import { bot, BOT_NAME, setupStart } from "./bot.ts"
 import { queueMiddleware } from "./middleware/queues.ts"
 import { addMiddlewaresToBot } from "./middleware/add-all-to-bot.ts"
 import { addScenesToBot } from "./scenes/add-all-to-bot.ts"
+import { supabaseStore } from "./middleware/session/session.ts"
 
 import { type Telegraf, Markup } from "npm:telegraf@4.12.3-canary.1"
 
@@ -125,8 +126,6 @@ const getReply = async (chatMessages: ChatCompletionRequestMessage[]) => {
 
 // @ts-expect-error trust me
 type Ctx = Parameters<Extract<Parameters<typeof bot.on<"text">>[1], Function>>[0]
-type Timestamp = number
-const cache = new Map<number, [Timestamp, Ctx]>()
 
 const handler = async (ctx: Ctx) => {
 	if (ctx.chat.type === "supergroup") return
@@ -277,8 +276,7 @@ bot.on(message("voice"), async ctx => {
 	const { file_id } = ctx.message.voice
 	const fileLink = await ctx.telegram.getFileLink(file_id)
 	const transcribeStart = performance.now()
-	// @ts-expect-error I'm not sure why this is an error, but it works
-	ctx.chatSession.pausedUpdates.set(ctx.update.update_id, [ transcribeStart, ctx as unknown as Ctx ])
+	supabaseStore.set(`paused-update:${ctx.update.update_id}`, [ transcribeStart, ctx as unknown as Ctx ])
 	await requestTranscript(fileLink as URL, ctx.update.update_id)
 	console.log("Got a voice message, waiting for transcription...")
 })
@@ -339,7 +337,11 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 						return
 					}
 
-					const [transcriptionStart, ctx] = cache.get(updateId) ?? []
+					const pausedUpdate: undefined | [
+						transcriptionStart: number,
+						ctx: Ctx
+					] = await supabaseStore.get(`paused-update:${updateId}`)
+					const [transcriptionStart, ctx] = pausedUpdate ?? []
 
 					if (!ctx || !transcriptionStart) {
 						console.error("No context found in cache for update", { updateId, ctx, transcriptionStart })
@@ -365,7 +367,7 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 				} catch (error) {
 					console.error("error", error)
 				} finally {
-					cache.delete(updateId)
+					await supabaseStore.delete(`paused-update:${updateId}`)
 					res.statusCode = 200
 					res.end()
 				}

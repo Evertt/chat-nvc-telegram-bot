@@ -21,7 +21,9 @@ export interface ChatSession {
   messages: Message[]
   storeMessages: boolean
   language_code: string
-  pausedUpdates: Map<number, {start: number, ctx: MyContext}>
+  pausedUpdates: {
+    [key: number | string]: {start: number, ctx: MyContext}
+  }
 }
 
 export interface UserSettings {
@@ -60,7 +62,7 @@ interface AsyncSessionStore<T = object> {
   delete: (key: string) => Promise<unknown>;
 }
 
-const supabaseStore: AsyncSessionStore<any> = {
+export const supabaseStore: AsyncSessionStore<any> = {
   async get(id) {
     const { data, error } = await supabase
       .from("sessions")
@@ -109,7 +111,7 @@ export const chatSessionMiddleware = session<ChatSession, MyContext, "chatSessio
     messages: [],
     storeMessages: ctx.chat?.type === "private",
     language_code: ctx.chat?.type !== "private" ? "en" : ctx.from?.language_code ?? "en",
-    pausedUpdates: new Map(),
+    pausedUpdates: {},
   }),
   getSessionKey: ctx => Promise.resolve(
     ctx.chat ? `chat:${ctx.chat.id}` : undefined
