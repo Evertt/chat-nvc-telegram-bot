@@ -277,7 +277,7 @@ bot.on(message("voice"), async ctx => {
 	const { file_id } = ctx.message.voice
 	const fileLink = await ctx.telegram.getFileLink(file_id)
 	const transcribeStart = performance.now()
-	supabaseStore.set(`paused-update:${ctx.update.update_id}`, [ transcribeStart, { ...ctx as unknown as Ctx }])
+	supabaseStore.set(`paused-update:${ctx.update.update_id}`, JSON.decycle([ transcribeStart, ctx]))
 	await requestTranscript(fileLink as URL, ctx.update.update_id)
 	console.log("Got a voice message, waiting for transcription...")
 })
@@ -341,7 +341,7 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 					const pausedUpdate: undefined | [
 						transcriptionStart: number,
 						ctx: Ctx
-					] = await supabaseStore.get(`paused-update:${updateId}`)
+					] = JSON.retrocycle(await supabaseStore.get(`paused-update:${updateId}`))
 					const [transcriptionStart, ctx] = pausedUpdate ?? []
 
 					if (!ctx || !transcriptionStart) {

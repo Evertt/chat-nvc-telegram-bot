@@ -23,9 +23,6 @@
     retrocycle, set, stringify, test
 */
 
-const stringify = JSON.stringify
-const parse = JSON.parse
-
 if (typeof JSON.decycle !== "function") {
   JSON.decycle = function decycle(object, replacer) {
       "use strict";
@@ -41,7 +38,7 @@ if (typeof JSON.decycle !== "function") {
 
 // So,
 
-//      var a = [];
+//      const a = [];
 //      a[0] = a;
 //      return JSON.stringify(JSON.decycle(a));
 
@@ -56,7 +53,7 @@ if (typeof JSON.decycle !== "function") {
 
       const objects = new WeakMap();     // object to path mappings
 
-      const decycled = (function derez(value, path) {
+      return (function derez(value, path) {
 
 // The derez function recurses through the object, producing the deep copy.
 
@@ -110,7 +107,7 @@ if (typeof JSON.decycle !== "function") {
                   Object.keys(value).forEach(function (name) {
                       nu[name] = derez(
                           value[name],
-                          path + "[" + stringify(name) + "]"
+                          path + "[" + JSON.stringify(name) + "]"
                       );
                   });
               }
@@ -118,11 +115,7 @@ if (typeof JSON.decycle !== "function") {
           }
           return value;
       }(object, "$"));
-
-      return stringify(decycled);
   };
-
-  JSON.stringify = (object, replacer) => stringify(JSON.decycle(object, replacer))
 }
 
 
@@ -145,13 +138,13 @@ if (typeof JSON.retrocycle !== "function") {
 // Goessner's JSONPath.
 
 // So,
-//      var s = '[{"$ref":"$"}]';
+//      const s = '[{"$ref":"$"}]';
 //      return JSON.retrocycle(JSON.parse(s));
 // produces an array containing a single element which is the array itself.
 
       const px = /^\$(?:\[(?:\d+|"(?:[^\\"\u0000-\u001f]|\\(?:[\\"\/bfnrt]|u[0-9a-zA-Z]{4}))*")\])*$/;
 
-      return (function rez(value) {
+      (function rez(value) {
 
 // The rez function walks recursively through the object looking for $ref
 // properties. When it finds one that has a value that is a path, then it
@@ -185,7 +178,6 @@ if (typeof JSON.retrocycle !== "function") {
               }
           }
       }($));
+      return $;
   };
-
-  JSON.parse = (string, reviver) => JSON.retrocycle(parse(string, reviver))
 }
