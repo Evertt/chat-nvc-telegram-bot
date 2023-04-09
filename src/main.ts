@@ -270,8 +270,8 @@ bot.on("text", handler)
 bot.on(message("voice"), async ctx => {
 	await ctx.reply(oneLine`
 		I'm trying out a new transcription service,
-		it may not even work.
-		You'll see if you get a response within a few minutes or not.
+		so it may not work all the time, but it's supposed to be faster than what I was using before.
+		I hope you'll understand, I'm trying my best to make this bot better and better.
 	`)
 
 	const { file_id } = ctx.message.voice
@@ -322,10 +322,13 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 					const update = JSON.parse(body) as {
 						status: "completed"
 						transcript_id: string
-					} | { status: "error" }
+					} | {
+						status: "error"
+						error: string
+					}
 
 					if (update.status === "error") {
-						throw ["transcript status error", update]
+						throw ["transcript status error", update.error]
 					}
 
 					const text = await fetchTranscript(update.transcript_id)
@@ -343,7 +346,16 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 					}
 
 					const transcriptionEnd = performance.now()
-					console.log(`Transcribed voice file in ${roundToSeconds((transcriptionEnd - transcriptionStart))} seconds`)
+					const transcriptionTime = `${roundToSeconds((transcriptionEnd - transcriptionStart))} seconds`
+					await ctx.reply(oneLine`
+						All in all, it took ${transcriptionTime} to transcribe your voice message.
+						One thing to note though, is that the service has a start-up time of about 15 to 25 seconds,
+						regardless of the duration of the voice message.
+						But after that, it can transcribe voice messages around 3 to 6 times faster
+						than the duration of the message. So longer voice messages will "feel" faster to transcribe.
+						Maybe it's good to know that the voice message must be longer than 160 ms and shorter than 10 hours.
+					`)
+					console.log(`Transcribed voice file in ${transcriptionTime}`)
 					ctx.message.text = text
 
 					const job = (ctx?: Ctx) => bot.handleUpdate(ctx!.update)
