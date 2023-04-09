@@ -341,7 +341,7 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 					const [transcriptionStart, ctx] = cache.get(updateId) ?? []
 
 					if (!ctx || !transcriptionStart) {
-						console.error("No context found in cache for update", updateId)
+						console.error("No context found in cache for update", { updateId, ctx, transcriptionStart })
 						return
 					}
 

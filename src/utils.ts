@@ -251,6 +251,8 @@ export const askAssistant = async (ctx: MyContext, question: string, saveInSessi
 }
 
 export const requestTranscript = async (url: URL, update_id: number) => {
+	const requestingTranscriptStart = performance.now()
+
 	const resp = await fetch("https://api.assemblyai.com/v2/transcript", {
 		headers: {
 			Authorization: ASSEMBLYAI_KEY,
@@ -271,6 +273,9 @@ export const requestTranscript = async (url: URL, update_id: number) => {
 	}
 
 	const { id } = await resp.json() as { id: string }
+
+	const requestingTranscriptEnd = performance.now()
+	console.log(`Requested transcript in ${requestingTranscriptEnd - requestingTranscriptStart} seconds`)
 
 	return id
 }
