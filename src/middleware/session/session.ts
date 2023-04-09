@@ -73,7 +73,7 @@ const supabaseStore: AsyncSessionStore<any> = {
       throw error
     }
 
-    return data.session
+    return data?.session
   },
 
   async set(id, session) {
