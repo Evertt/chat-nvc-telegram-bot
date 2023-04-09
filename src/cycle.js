@@ -184,6 +184,6 @@ if (JSON.parse.name !== "retrocycle") {
           }
       }($));
 
-      return parse($);
+      return retrocycled(parse($));
   };
 }
