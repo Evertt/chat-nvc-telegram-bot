@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
-import type { Context, MiddlewareFn } from "npm:telegraf@4.12.3-canary.1"
+import type { Context } from "npm:telegraf@4.12.3-canary.1"
 import type { Chat, Update } from "npm:telegraf@4.12.3-canary.1/types"
 import { Queue } from "https://deno.land/x/queue@1.2.0/mod.ts"
 import type { Modify } from "../utils.ts"

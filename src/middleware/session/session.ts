@@ -5,8 +5,8 @@ import "https://deno.land/std@0.179.0/dotenv/load.ts"
 import { Scenes } from "npm:telegraf@4.12.3-canary.1"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.4"
 import { type Context, session } from "npm:telegraf@4.12.3-canary.1"
-import type { LatestSession } from "./versions/all.ts"
-export { sessionVersions } from "./versions/all.ts"
+import type { LatestSession } from "../deprecated/session/versions/all.ts"
+export { sessionVersions } from "../deprecated/session/versions/all.ts"
 import type { MyContext } from "../../bot.ts"
 
 const {
@@ -20,9 +20,7 @@ export interface ChatSession {
   messages: Message[]
   storeMessages: boolean
   language_code: string
-  pausedUpdates: {
-    [key: number | string]: {start: number, ctx: MyContext}
-  }
+  type: "private" | "group"
 }
 
 export interface UserSettings {
@@ -113,7 +111,7 @@ export const chatSessionMiddleware = session<ChatSession, MyContext, "chatSessio
     messages: [],
     storeMessages: ctx.chat?.type === "private",
     language_code: ctx.chat?.type !== "private" ? "en" : ctx.from?.language_code ?? "en",
-    pausedUpdates: {},
+    type: ctx.chat?.type === "private" ? "private" : "group",
   }),
   getSessionKey: ctx => Promise.resolve(
     ctx.chat ? `chat:${ctx.chat.id}` : undefined

@@ -4,5 +4,10 @@ export const rememberWeHaveSpokenBeforeMiddleware = async (ctx: ContextWithMulti
 	await next()
 	if (!ctx.from || ctx.chat?.type !== "private") return
 	if (!ctx.userSession) return
+	
+	if (!ctx.userSession.haveSpokenBefore) {
+		ctx.userSession.totalTokensGifted = 200_000
+	}
+
 	ctx.userSession.haveSpokenBefore = true
 }

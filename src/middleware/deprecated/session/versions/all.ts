@@ -1,4 +1,4 @@
-import type { Union2Tuple, FixedLengthArray } from "../../../utils.ts"
+import type { Union2Tuple, FixedLengthArray } from "../../../../utils.ts"
 import type { LastArrayElement } from "npm:type-fest@3.6.1"
 import { Session as SessionV1 } from "./v1.ts"
 import { Session as SessionV2 } from "./v2.ts"
