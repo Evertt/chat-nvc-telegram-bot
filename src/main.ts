@@ -263,7 +263,7 @@ bot.on(message("voice"), async ctx => {
 	const { file_id } = ctx.message.voice
 	const fileLink = await ctx.telegram.getFileLink(file_id)
 	const transcribeStart = performance.now()
-	supabaseStore.set(`paused-update:${ctx.update.update_id}`, JSON.decycle([ transcribeStart, ctx ]))
+	supabaseStore.set(`paused-update:${ctx.update.update_id}`, JSON.decycle([ transcribeStart, ctx.update ]))
 	await requestTranscript(fileLink as URL, ctx.update.update_id)
 	console.log("Got a voice message, waiting for transcription...")
 })
@@ -300,7 +300,19 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 				const url = new URL(req.url!, DOMAIN)
 				const updateId = parseInt(url.searchParams.get("update_id")!)
 
-				try {
+				const pausedUpdate: undefined | [
+					transcriptionStart: number,
+					update: Ctx["update"]
+				] = JSON.retrocycle(await supabaseStore.get(`paused-update:${updateId}`))
+
+				const [transcriptionStart, ctxUpdate] = pausedUpdate ?? []
+
+				if (!ctxUpdate || !transcriptionStart) {
+					console.error("No context found in cache for update", { updateId, ctxUpdate, transcriptionStart })
+					return
+				}
+
+			try {
 					let body = ''
 					// parse each buffer to string and append to body
 					for await (const chunk of req) body += String(chunk)
@@ -320,20 +332,7 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 					const text = await fetchTranscript(update.transcript_id)
 
 					if (!text) {
-						console.error("No text found for transcript status update", updateId)
-						return
-					}
-
-					const pausedUpdate: undefined | [
-						transcriptionStart: number,
-						ctx: Ctx
-					] = JSON.retrocycle(await supabaseStore.get(`paused-update:${updateId}`))
-
-					const [transcriptionStart, ctx] = pausedUpdate ?? []
-
-					if (!ctx || !transcriptionStart) {
-						console.error("No context found in cache for update", { updateId, ctx, transcriptionStart })
-						return
+						throw ["No text found for transcript status update", updateId]
 					}
 
 					const transcriptionEnd = performance.now()
@@ -347,11 +346,12 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 					// 	Maybe it's good to know that the voice message must be longer than 160 ms and shorter than 10 hours.
 					// `)
 					console.log(`Transcribed voice file in ${transcriptionTime}`)
-					ctx.update.message.text = text
+					ctxUpdate.message.text = text
 
-					await bot.handleUpdate(ctx.update)
+					await bot.handleUpdate(ctxUpdate)
 				} catch (error) {
 					console.error("error", error)
+					bot.telegram.sendMessage(ctxUpdate.message.chat.id, "There was an error transcribing your voice message.")
 				} finally {
 					await supabaseStore.delete(`paused-update:${updateId}`)
 					res.statusCode = 200
