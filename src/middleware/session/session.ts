@@ -8,7 +8,6 @@ import { type Context, session } from "npm:telegraf@4.12.3-canary.1"
 import type { LatestSession } from "./versions/all.ts"
 export { sessionVersions } from "./versions/all.ts"
 import type { MyContext } from "../../bot.ts"
-import { type Update } from "npm:telegraf@4.12.3-canary.1/types"
 
 const {
   SUPABASE_URL,
@@ -34,6 +33,9 @@ export interface UserSettings {
 export interface UserSession {
   haveSpokenBefore: boolean
   settings: UserSettings
+  totalTokensUsed?: number
+  totalTokensPaidFor?: number
+  totalTokensGifted?: number
 }
 
 export interface UserChatSession {

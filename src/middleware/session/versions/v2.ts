@@ -8,6 +8,7 @@ export type Message = Modify<PrevMessage, {
   timestamp: never
   date: string
   checkpoint?: boolean
+  tokens?: number
 }>
 
 export class Session implements NewSession<PrevSession> {

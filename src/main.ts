@@ -3,7 +3,7 @@ import "https://deno.land/std@0.179.0/dotenv/load.ts"
 import "./cycle.js"
 
 // import * as http from "node:http"
-import { bot, BOT_NAME, setupStart } from "./bot.ts"
+import { bot, BOT_NAME, MyContext, setupStart } from "./bot.ts"
 import { addMiddlewaresToBot } from "./middleware/add-all-to-bot.ts"
 import { addScenesToBot } from "./scenes/add-all-to-bot.ts"
 import { supabaseStore } from "./middleware/session/session.ts"
@@ -16,7 +16,6 @@ import {
 	moderate,
 	getAssistantResponse,
 	getMessagesFromLastCheckpoint,
-	addNewCheckPointIfNeeded,
 	requestTranscript,
 	fetchTranscript,
 	roundToSeconds,
@@ -24,9 +23,6 @@ import {
 import { OPENAI_OVERLOADED_MESSAGE } from "./error-messages.ts"
 import { oneLine, oneLineCommaListsAnd, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
-import type {
-	ChatCompletionRequestMessage,
-} from "npm:openai@3.2.1"
 import { isBotAskingForDonation } from "./donations.ts"
 
 const {
@@ -47,6 +43,10 @@ bot.start(async ctx => {
 
 	if (ctx.chat.type !== "private")
 		return ctx.reply("Please write to me in a private chat 🙏")
+
+	bot.telegram.deleteMyCommands(
+		{ scope: { type: "chat", chat_id: ctx.chat!.id } }
+	)
 
 	const greeting = ctx.userSession.haveSpokenBefore
 		? `Okay, let's start over. How can I help you this time, ${ctx.from.first_name}?`
@@ -74,7 +74,7 @@ bot.start(async ctx => {
 	]
 
 	console.log("Sending greeting.")
-	await ctx.reply(greeting)
+	await ctx.reply(greeting, { reply_markup: { remove_keyboard: true } })
 	console.log("Greeting sent.")
 })
 
@@ -103,16 +103,18 @@ bot.command("donate", async ctx => {
 	]))
 })
 
-const getReply = async (chatMessages: ChatCompletionRequestMessage[]) => {
+const getReply = async (ctx: MyContext) => {
+	const { chatMessages } = await getMessagesFromLastCheckpoint(ctx)
+
 	let moderationResult = await moderate(chatMessages.at(-1)!.content)
 	if (moderationResult) return oneLineCommaListsAnd`
 		Your message was flagged by OpenAI for ${moderationResult}.
 		Please try to rephrase your message. 🙏
 	`
 
-	const assistantResponse = await getAssistantResponse(chatMessages)
+	const assistantResponse = await getAssistantResponse(ctx)
 	
-	moderationResult = await moderate(assistantResponse.content)
+	moderationResult = await moderate(assistantResponse)
 	if (moderationResult) return oneLine`
 		Sorry, I was about to say something potentially inappropriate.
 		I don't know what happened.
@@ -121,7 +123,7 @@ const getReply = async (chatMessages: ChatCompletionRequestMessage[]) => {
 		Thank you. 🙏
 	`
 
-	return assistantResponse.content
+	return assistantResponse
 }
 
 // @ts-expect-error trust me
@@ -145,10 +147,6 @@ const handler = async (ctx: Ctx) => {
 		ctx.chatSession.messages.push(lastMessage)
 	}
 
-	let messages = ctx.chatSession.messages
-	const messagesFromLastCheckpoint = getMessagesFromLastCheckpoint(messages)
-	let chatMessages: ChatCompletionRequestMessage[] = []
-
 	if (!chatIsPrivate) {
 		const wasMentioned = "voice" in ctx.message
 			? text.includes(BOT_NAME)
@@ -170,7 +168,7 @@ const handler = async (ctx: Ctx) => {
 			`)
 		}
 
-		if (reply) {
+		if (!ctx.chatSession.storeMessages && reply) {
 			let text = "text" in reply ? reply.text : ""
 
 			if ("voice" in reply) {
@@ -179,21 +177,19 @@ const handler = async (ctx: Ctx) => {
 				text = await getTranscription(fileLink as URL)
 			}
 
-			messages = [lastMessage]
+			ctx.chatSession.messages = [lastMessage]
 
-			messages.unshift({
+			ctx.chatSession.messages.unshift({
 				type: "text" in reply ? "text" : "voice",
 				name: reply.from!.first_name,
 				message: text,
 				date: new Date(reply.date).toString(),
 			})
-
-			;({ messages, chatMessages } = await addNewCheckPointIfNeeded(messages, false, "translation"))
 		}
 
-		return ctx.persistentChatAction(
+		return await ctx.persistentChatAction(
 			"typing",
-			() => getReply(chatMessages)
+			() => getReply(ctx)
 				.then(async reply => {
 					if (ctx.chatSession.storeMessages) {
 						ctx.chatSession.messages.push({
@@ -213,19 +209,9 @@ const handler = async (ctx: Ctx) => {
 		)
 	}
 
-	({ messages, chatMessages } = await addNewCheckPointIfNeeded(
-		messages, chatIsPrivate, chatIsPrivate ? "empathy" : "translation"
-	))
-
-	if (messagesFromLastCheckpoint[0].message !== messages[0].message) {
-		ctx.chatSession.messages.splice(
-			ctx.chatSession.messages.length - messages.length + 1, 0, messages[0]
-		)
-	}
-
-	return ctx.persistentChatAction(
+	return await ctx.persistentChatAction(
 		"typing",
-		() => getReply(chatMessages)
+		() => getReply(ctx)
 		.then(async reply => {
 			ctx.chatSession.messages.push({
 				type: "text",

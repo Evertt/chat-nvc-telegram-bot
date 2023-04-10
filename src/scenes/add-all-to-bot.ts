@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-explicit-any
 import { Telegraf, Scenes } from "npm:telegraf@4.12.3-canary.1"
 import { type MyContext } from "../bot.ts"
 import { settingsScene } from "./settings.ts"
@@ -9,7 +10,7 @@ export const addScenesToBot = (bot: Telegraf<MyContext>) => {
 
   const stage = new Scenes.Stage<MyContext>([
     settingsScene,
-    rolePlayScene,
+    rolePlayScene as any,
   ])
   
   bot.use(stage.middleware())

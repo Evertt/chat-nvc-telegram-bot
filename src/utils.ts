@@ -11,7 +11,7 @@ import type {
 import { type MyContext, BOT_NAME } from "./bot.ts"
 import { getTokens, MAX_TOKENS } from "./tokenizer.ts"
 // @deno-types="npm:@types/lodash-es@4.17.6"
-import { findLastIndex } from "npm:lodash-es@4.17.21"
+import { findLastIndex, memoize } from "npm:lodash-es@4.17.21"
 import { type IntroData, getSystemPrompt } from "./system-prompt.ts"
 import { oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 
@@ -19,11 +19,15 @@ export type Message = MyContext["chatSession"]["messages"][number]
 
 const { OPENAI_KEY, ASSEMBLYAI_KEY, DOMAIN } = Deno.env.toObject()
 
-export type Modify<T, K> = Omit<T, keyof K> & ConditionalExcept<K, undefined>
+export type Modify<T, K> = Omit<T, keyof K> & ConditionalExcept<K, never>
 
 export const sleep = (ms: number) => new Promise<void>(
 	resolve => setTimeout(resolve, ms)
 )
+
+export type MyChatCompletionRequestMessage = ChatCompletionRequestMessage & {
+	tokens: number
+}
 
 type Contra<T> =
   T extends any 
@@ -87,38 +91,66 @@ export const moderate = async (input: string) => {
 	return false
 }
 
-export const summarize = async (chatMessages: ChatCompletionRequestMessage[]) => {
+export const summarize = async (ctx: MyContext) => {
 	console.log("Trying to get a summary")
-	const summaryMessage = await getAssistantResponse([...chatMessages, {
-		role: "system",
-		content: oneLine`
-			Please summarize the observations, feelings, needs,
-			and possibly requests that the other person
-			(or people, if there were more than one) had in the conversation.
-			If there were any valuable insights in the conversation,
-			you can include those too in the summary.
-		`
-	}])
-	console.log("Got a summary:", summaryMessage.content)
+
+	const summaryMessage = await askAssistant(ctx, oneLine`
+		Please summarize the observations, feelings, needs,
+		and possibly requests that the other person
+		(or people, if there were more than one) had in the conversation.
+		If there were any valuable insights in the conversation,
+		you can include those too in the summary.
+	`, true)
+
+	console.log("Got a summary:", summaryMessage)
+
+	ctx.chatSession.messages.at(-1)!.checkpoint = true
 
 	return summaryMessage
 }
 
-export const getMessagesFromLastCheckpoint = (messages: Message[]) => {
-	const i = findLastIndex(messages, message => !!message.checkpoint)
-	return messages.slice(Math.max(i, 0))
+export const getMessagesFromLastCheckpoint = async (ctx: MyContext) => {
+	const messages = [ ...ctx.chatSession.messages ]
+	let i = findLastIndex(messages, message => !!message.checkpoint)
+	let messagesFromLastCheckpoint = messages.slice(Math.max(i, 0))
+
+	const chatIsPrivate = ctx.chat?.type === "private"
+	const allNames = getNamesFromMessages(messages)
+	let chatMessages = convertToChatMessages(messagesFromLastCheckpoint, allNames, chatIsPrivate, chatIsPrivate ? "empathy" : "translation")
+
+	const n = needsNewCheckPoint(messagesFromLastCheckpoint, chatMessages)
+
+	if (n) {
+		const lastMessages = messagesFromLastCheckpoint.splice(-n)
+		ctx.chatSession.messages = messagesFromLastCheckpoint
+		await summarize(ctx)
+		ctx.chatSession.messages.push(...lastMessages)
+		ctx.chatSession.messages = [
+			...messages.slice(0, i),
+			...ctx.chatSession.messages
+		]
+
+		i = findLastIndex(ctx.chatSession.messages, message => !!message.checkpoint)
+		messagesFromLastCheckpoint = ctx.chatSession.messages.slice(i)
+		chatMessages = convertToChatMessages(messagesFromLastCheckpoint, allNames, chatIsPrivate, chatIsPrivate ? "empathy" : "translation")
+	}
+
+	return { messages: messagesFromLastCheckpoint, chatMessages }
 }
 
 export const getNamesFromMessages = (messages: Message[]) => {
 	const names = new Set(messages.map(msg => msg.name))
 	names.delete(BOT_NAME)
+	names.delete("system")
 	return [...names]
 }
 
 export const convertToChatMessages = (messages: Message[], allNames: string[], excludeNames: boolean, request: IntroData["request"] = "translation") => {
-	const chatMessages: ChatCompletionRequestMessage[] = messages.map(msg => (
-		{ role: /chatnvc/i.test(msg.name) ? "assistant" : "user", content: `${excludeNames || msg.name === BOT_NAME ? '' : msg.name + ": "}${msg.message}` }
-	))
+	const chatMessages: MyChatCompletionRequestMessage[] = messages.map(msg => ({
+		role: msg.name === "system" ? "system" : /chatnvc/i.test(msg.name) ? "assistant" : "user",
+		content: `${excludeNames || [BOT_NAME, "system"].includes(msg.name) ? '' : msg.name + ": "}${msg.message}`,
+		tokens: (excludeNames || [BOT_NAME, "system"].includes(msg.name) ? 0 : getTokens(msg.name + ": ")) + (msg.tokens ??= getTokens(msg.message) + 4),
+	}))
 
 	const systemPrompt = getSystemPrompt(
 		{
@@ -128,59 +160,50 @@ export const convertToChatMessages = (messages: Message[], allNames: string[], e
 		false,
 	)
 
-	chatMessages.unshift({ role: "system", content: systemPrompt })
+	chatMessages.unshift({
+		role: "system",
+		content: systemPrompt,
+		tokens: getTokens(systemPrompt) + 4,
+	})
 
 	return chatMessages
 }
 
-export const getTokenCount = (chatMessages: ChatCompletionRequestMessage[]) => {
+export const getTokenCount = (chatMessages: MyChatCompletionRequestMessage[]) => {
 	const tokenCount = chatMessages.reduce(
-		(tokenCount, msg) => tokenCount + getTokens(msg.content),
+		(tokenCount, msg) => tokenCount + (msg.tokens ??= getTokens(msg.content) + 4),
 		0
 	)
 
 	return tokenCount
 }
 
-export const addNewCheckPointIfNeeded = async (messages: Message[], excludeNames = false, request: IntroData["request"] = "translation") => {
-	const allNames = getNamesFromMessages(messages)
-	messages = getMessagesFromLastCheckpoint(messages)
-	let chatMessages = convertToChatMessages(messages, allNames, excludeNames, request)
+export const needsNewCheckPoint = (messages: Message[], chatMessages: MyChatCompletionRequestMessage[]) => {
 	let tokenCount = getTokenCount(chatMessages)
 	const lastMessages: Message[] = []
 
 	while (tokenCount >= MAX_TOKENS && messages.length) {
-		lastMessages.unshift(messages.pop()!)
-		chatMessages.pop()
-		tokenCount = getTokenCount(chatMessages)
+		lastMessages.push(messages.pop()!)
+		const deletedMessage = chatMessages.pop()
+		tokenCount -= deletedMessage!.tokens
 	}
 	
 	if (tokenCount >= MAX_TOKENS)
 		throw new Error("Messages too long to summarize")
 
-	if (!lastMessages.length)
-		return { messages, chatMessages }
-	
-	const summary = await summarize(chatMessages)
-	chatMessages = convertToChatMessages(lastMessages, allNames, excludeNames, request)
-	chatMessages.splice(1, 0, summary)
-	
-	const summaryMessage: Message = {
-		type: "text",
-		name: BOT_NAME,
-		message: summary.content,
-		date: Date(),
-		checkpoint: true,
-	}
-
-	return { messages: [summaryMessage, ...lastMessages], chatMessages }
+	return lastMessages.length
 }
 
-export async function getAssistantResponse(chatMessages: ChatCompletionRequestMessage[]) {
+export async function getAssistantResponse(ctx: MyContext, saveInSession = true, temperature = 0.9) {
+	const { chatMessages } = await getMessagesFromLastCheckpoint(ctx)
+
 	const chatRequestOpts: CreateChatCompletionRequest = {
 		model: "gpt-3.5-turbo",
-		temperature: 0.9,
-		messages: chatMessages,
+		temperature,
+		messages: chatMessages.map(msg => ({
+			role: msg.role,
+			content: msg.content,
+		})),
 	}
 
 	const chatResponse = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -207,38 +230,47 @@ export async function getAssistantResponse(chatMessages: ChatCompletionRequestMe
 	assistantMessage.content = assistantMessage.content
 		.replace(/^chatnvc\w*: /i, "")
 
-	return assistantMessage
-}
+	const sumTokens = memoize(() => ctx.chatSession.messages.slice(0, -1).reduce(
+		(sum, msg) => sum + (msg.tokens ??= getTokens(msg.message) + 4),
+		0
+	))
 
-export const askAssistant = async (ctx: MyContext, question: string, saveInSession = false) => {
-	const chatIsPrivate = ctx.chat?.type === "private"
-	let messages = ctx.chatSession.messages
-	const allNames = getNamesFromMessages(messages)
-	messages = getMessagesFromLastCheckpoint(messages)
-	const chatMessages = convertToChatMessages(messages, allNames, chatIsPrivate, chatIsPrivate ? "empathy" : "translation")
+	if (ctx.chatSession.messages.at(-1)!.tokens == null) {
+		const promptTokens = completionResponse.usage?.prompt_tokens ?? getTokens(assistantMessage.content)
+		ctx.chatSession.messages.at(-1)!.tokens = promptTokens - sumTokens()
+	}
 
-  const systemQuestion = {
-		role: "system",
-		content: question,
-	} as const
-
-	chatMessages.push(systemQuestion)
+	ctx.userSession.totalTokensUsed ??= sumTokens() + ctx.chatSession.messages.at(-1)!.tokens!
+	ctx.userSession.totalTokensUsed += completionResponse.usage?.total_tokens
+		?? ctx.userSession.totalTokensUsed + getTokens(assistantMessage.content)
 
 	if (saveInSession) {
 		ctx.chatSession.messages.push({
 			type: "text",
-			name: "system",
-			message: question,
+			name: BOT_NAME,
+			message: assistantMessage.content,
 			date: Date(),
+			tokens: completionResponse.usage?.completion_tokens,
 		})
 	}
 
-	const assistantMessage = await getAssistantResponse(chatMessages)
-	const answer = assistantMessage.content
+	return assistantMessage.content
+}
 
+export const askAssistant = async (ctx: MyContext, question: string, saveInSession = false) => {
+	ctx.chatSession.messages.push({
+		type: "text",
+		name: "system",
+		message: question,
+		date: Date(),
+	})
+
+	const answer = await getAssistantResponse(ctx, saveInSession, 0.2)
+	
 	console.log("Assistant answer:", answer)
 
-	if (saveInSession) {
+	if (!saveInSession) ctx.chatSession.messages.pop()
+	else {
 		ctx.chatSession.messages.push({
 			type: "text",
 			name: BOT_NAME,
