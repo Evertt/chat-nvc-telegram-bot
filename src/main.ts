@@ -118,9 +118,11 @@ bot.command("email", async ctx => {
 		So for example: /email example@gmail.com
 	`)
 
-	const email = ctx.message.text.slice(emailEntity.offset, emailEntity.offset + emailEntity.length)
+	await ctx.reply(oneLine`
+		Okay, I'm preparing the email...
+	`)
 
-	console.log("email", email)
+	const email = ctx.message.text.slice(emailEntity.offset, emailEntity.offset + emailEntity.length)
 
 	const messages = "<h1>Your Chat History</h1>\n<p>" + ctx.chatSession.messages.map(
 		msg => `<strong>${msg.name}:</strong> ${msg.message}`
