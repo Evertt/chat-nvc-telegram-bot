@@ -27,6 +27,14 @@ export const addMiddlewaresToBot = <C extends ContextWithMultiSession = ContextW
       ctx.userSession.totalTokensGifted ??= 200_000
       ctx.userSession.totalTokensPaidFor ??= 0
       ctx.userSession.totalTokensUsed ??= 0
+
+      // Remove duplicate messages
+      ctx.chatSession.messages = ctx.chatSession.messages.reduce((messages, message) => {
+        const lastMessage = messages.at(-1)
+        if (!lastMessage) return [message]
+        if (lastMessage.message === message.message) return messages
+        return [...messages, message]
+      }, [] as typeof ctx.chatSession.messages)
       
       return next()
     },
