@@ -20,6 +20,10 @@ export const addMiddlewaresToBot = <C extends ContextWithMultiSession = ContextW
       // @ts-expect-error trust me...
       delete ctx.chatSession.pausedUpdates
 
+      const chatType = ctx.chat?.type ?? ""
+      if (chatType === "private" || chatType === "group")
+        ctx.chatSession.type ??= chatType
+
       ctx.userSession.totalTokensGifted ??= 200_000
       ctx.userSession.totalTokensPaidFor ??= 0
       ctx.userSession.totalTokensUsed ??= 0
