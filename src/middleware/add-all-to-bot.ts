@@ -16,6 +16,16 @@ export const addMiddlewaresToBot = <C extends ContextWithMultiSession = ContextW
     chatSessionMiddleware,
     userSessionMiddleware,
     userChatSession,
+    (ctx, next) => {
+      // @ts-expect-error trust me...
+      delete ctx.chatSession.pausedUpdates
+
+      ctx.userSession.totalTokensGifted ??= 200_000
+      ctx.userSession.totalTokensPaidFor ??= 0
+      ctx.userSession.totalTokensUsed ??= 0
+      
+      return next()
+    },
     rememberWeHaveSpokenBeforeMiddleware,
   )
   console.log("Bot middleware set up.")

@@ -44,7 +44,7 @@ bot.start(async ctx => {
 	if (ctx.chat.type !== "private")
 		return ctx.reply("Please write to me in a private chat 🙏")
 
-	bot.telegram.deleteMyCommands(
+	await bot.telegram.deleteMyCommands(
 		{ scope: { type: "chat", chat_id: ctx.chat!.id } }
 	)
 

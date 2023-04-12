@@ -1,9 +1,7 @@
 // deno-lint-ignore-file no-explicit-any
-import "npm:redis@4.6.5"
-import "npm:kysely@0.24.2"
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 import { Scenes } from "npm:telegraf@4.12.3-canary.1"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@1.35.4"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.20.0"
 import { type Context, session } from "npm:telegraf@4.12.3-canary.1"
 import type { LatestSession } from "../deprecated/session/versions/all.ts"
 export { sessionVersions } from "../deprecated/session/versions/all.ts"
@@ -31,9 +29,9 @@ export interface UserSettings {
 export interface UserSession {
   haveSpokenBefore: boolean
   settings: UserSettings
-  totalTokensUsed?: number
-  totalTokensPaidFor?: number
-  totalTokensGifted?: number
+  totalTokensUsed: number
+  totalTokensPaidFor: number
+  totalTokensGifted: number
 }
 
 export interface UserChatSession {
@@ -124,6 +122,9 @@ export const userSessionMiddleware = session<UserSession, MyContext, "userSessio
       receiveVoiceTranscriptions: true,
       askForDonation: true,
     },
+    totalTokensUsed: 0,
+    totalTokensPaidFor: 0,
+    totalTokensGifted: 200_000,
   }),
   getSessionKey: ctx => Promise.resolve(
     ctx.from ? `user:${ctx.from.id}` : undefined

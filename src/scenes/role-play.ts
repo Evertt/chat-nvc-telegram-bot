@@ -8,9 +8,7 @@ export const ROLE_PLAY_SCENE = "ROLE_PLAY"
 type Session = MyContext["session"]
 type NewSession = Modify<Session, {
   __scenes: Modify<Session["__scenes"], {
-    cursor: number
     state: {
-      message_id: number
       other: Other
       role_play_kind: "practice_nvc" | "feel_heard" | "see_example"
     }
@@ -23,127 +21,9 @@ export type NewContext = Omit<MyContext, "scene"> & Modify<MyContext, {
   session: NewSession
 }> & {
   scene: Scenes.SceneContextScene<NewContext, SceneSessionData>
-  wizard: Scenes.WizardContextWizard<NewContext>
 }
 
 export const rolePlayScene = new Scenes.BaseScene<NewContext>(ROLE_PLAY_SCENE)
-// export const rolePlayWizard = new Scenes.WizardScene<NewContext>(
-//   ROLE_PLAY_SCENE,
-//   async ctx => {
-//     const name = ctx.from!.first_name
-
-//     const answerJson = await askAssistant(ctx, oneLine`
-//       Please tell me who ${name} has mainly been talking about in this conversation.
-//       Preferably by relation, but otherwise by name. Of course it might also be that
-//       ${name} hasn't yet mentioned any other person yet.
-//       In any case, I want you to give me the answer in json format.
-//       In the case that ${name} referred to the other by a relation,
-//       like if ${name} said "my colleague", then respond: {"type":"relation","value":"colleague"}.
-//       Or other examples might be "my mother" results in {"type":"relation","value":"mother"}.
-//       Or "a guy I'm dating" results in {"type":"relation","value":"guy they're dating"}.
-//       In the case ${name} has referred to the other person by a name, but not their relation,
-//       like "John", respond: {"type":"name","value":"John"}.
-//       It's also possible that they've referred to the other person both by name and their relation,
-//       so like "my friend, her name is Jane" would result in {"type":"both","value":"friend, Jane"},
-//       or "some girl I'm dating, called Sarah" would result in {"type":"both","value":"girl they're dating, Sarah"}.
-//       Finally, in the case that ${name} hasn't yet talked about another person,
-//       respond: {"type":"unknown","value":"nobody"}.
-//       In any case, respond with just the json and nothing else.
-//     `)
-
-//     const other = JSON.parse(answerJson) as Other
-
-//     ctx.scene.state.other = other
-
-//     const yourReferral = referrals[other.type](other.value, "your")
-//     const myReferral = referrals[other.type](other.value, "my")
-
-//     ctx.chatSession.messages.push({
-//       name,
-//       type: "text",
-//       message: "Can we do a role-play?",
-//       date: Date(),
-//     })
-
-//     const reply = myReferral === "?"
-//       ? oneLine`
-//         Okay, let's role-play. Who do you want me to play?
-//         And do you want me to play <i>with</i> NVC skills?
-//         Or do you want me to play <i>without</i> NVC skills,
-//         so more like how normal people talk?
-//       `
-//       : stripIndents`
-//         Okay, so I can imagine three different kinds of role-play that we could do.
-
-//         ${oneLine`
-//           <u>If you want to practice your NVC skills</u> in a conversation with ${yourReferral},
-//           then I can pretend to be ${yourReferral} and you can play yourself, trying your best to speak and listen in NVC.
-//         `}
-
-//         ${oneLine`
-//           <u>If you would like to have the experience of being heard by ${yourReferral}</u>,
-//           then I can pretend I am ${yourReferral} with my NVC skills, and you can just play yourself.
-//         `}
-
-//         ${oneLine`
-//           Or <u>if you would like to see an example of how you might be able to have a conversation with ${yourReferral}</u>,
-//           then I can pretend I'm you with my NVC skills, and you can play ${yourReferral} as naturally as you can.
-//           That last one is a bit tricky though, because that one doesn't work if you have a strong enemy image of ${yourReferral}.
-//         `}
-
-//         Do you know which one you would like to do?
-//       `
-    
-//     const state = ctx.scene.state
-
-//     state.message_id = await ctx.replyWithHTML(reply, myReferral === "?"
-//       ? undefined : Markup.inlineKeyboard([
-//         [Markup.button.callback("I want to practice NVC", "practice_nvc")],
-//         [Markup.button.callback("I want to feel heard", "feel_heard")],
-//         [Markup.button.callback("I'd like to see how you'd handle this", "see_example")],
-//       ])).then(msg => msg.message_id)
-
-//     ctx.chatSession.messages.push({
-//       type: "text",
-//       name: BOT_NAME,
-//       message: reply,
-//       date: Date(),
-//     })
-
-//     bot.telegram.setMyCommands(
-//       [{ command: "stop_role_play", description: "End the current role-play." }],
-//       { scope: { type: "chat", chat_id: ctx.chat!.id } }
-//     )
-
-//     return ctx.wizard.next()
-//   },
-//   async ctx => {
-//     // @ts-expect-error ctx.match should exist, I hope at least.
-//     console.log("ctx.match", ctx.match)
-//     return await ctx.scene.leave()
-
-//     // const message_id = ctx.scene.state.message_id
-//     // const name = ctx.from!.first_name
-//     // const other = ctx.scene.state.other
-
-//     // ctx.scene.state.role_play_kind = ctx.match![0]
-//     // const theirReferral = referrals[other.type](other.value, "their")
-
-//     // const answer = await askAssistant(ctx, oneLine`
-//     //   Okay, so ${name} wants to practice NVC in a role-play with you.
-//     //   So ${name}'ll play themself, trying to speak NVC.
-//     //   And you'll play ${theirReferral} without NVC skills,
-//     //   but as people normally talk, and also based on what ${name} has told you about ${theirReferral} so far.
-//     //   If ${name} has told you that ${theirReferral} can be a little difficult, then also be a little difficult.
-//     //   But don't overdo it, if ${name} is doing a good job at listening empathetically then allow yourself to be touched by that.
-//     //   Now tell ${name} that you're ready and that they can start. Also tell ${name} that they can end the role-play at any time by typing /stop_role_play.
-//     // `, true)
-
-//     // await ctx.deleteMessage(message_id)
-
-//     // await ctx.replyWithHTML(answer)
-//   }
-// )
 
 type ByName = {
   type: "name"
@@ -249,15 +129,13 @@ rolePlayScene.enter(async ctx => {
 
       Do you know which one you would like to do?
     `
-  
-  const state = ctx.scene.state
 
-  state.message_id = await ctx.replyWithHTML(reply, myReferral === "?"
+  await ctx.replyWithHTML(reply, myReferral === "?"
     ? undefined : Markup.inlineKeyboard([
       [Markup.button.callback("I want to practice NVC", "practice_nvc")],
       [Markup.button.callback("I want to feel heard", "feel_heard")],
       [Markup.button.callback("I'd like to see how you'd handle this", "see_example")],
-    ])).then(msg => msg.message_id)
+    ]))
 
   ctx.chatSession.messages.push({
     type: "text",
@@ -273,7 +151,6 @@ rolePlayScene.enter(async ctx => {
 })
 
 rolePlayScene.action("practice_nvc", async ctx => {
-  const message_id = ctx.scene.state.message_id
   const name = ctx.from!.first_name
   const other = ctx.scene.state.other
 
@@ -290,13 +167,12 @@ rolePlayScene.action("practice_nvc", async ctx => {
     Now tell ${name} that you're ready and that they can start. Also tell ${name} that they can end the role-play at any time by typing /stop_role_play.
   `, true)
 
-  await ctx.deleteMessage(message_id)
+  await ctx.deleteMessage()
 
   await ctx.replyWithHTML(answer)
 })
 
 rolePlayScene.action("feel_heard", async ctx => {
-  const message_id = ctx.scene.state.message_id
   const name = ctx.from!.first_name
   const other = ctx.scene.state.other
 
@@ -313,13 +189,12 @@ rolePlayScene.action("feel_heard", async ctx => {
     Now tell ${name} that you're ready and that they can start. Also tell ${name} that they can end the role-play at any time by typing /stop_role_play.
   `, true)
 
-  await ctx.deleteMessage(message_id)
+  await ctx.deleteMessage()
 
   await ctx.replyWithHTML(answer)
 })
 
 rolePlayScene.action("see_example", async ctx => {
-  const message_id = ctx.scene.state.message_id
   const name = ctx.from!.first_name
   const other = ctx.scene.state.other
 
@@ -341,7 +216,7 @@ rolePlayScene.action("see_example", async ctx => {
     And finally, don't start your messages with "${name}:".
   `, true)
 
-  await ctx.deleteMessage(message_id)
+  await ctx.deleteMessage()
 
   await ctx.replyWithHTML(answer)
 })
@@ -349,35 +224,38 @@ rolePlayScene.action("see_example", async ctx => {
 rolePlayScene.command("stop_role_play", ctx => ctx.scene.leave())
 
 rolePlayScene.leave(async ctx => {
-  bot.telegram.deleteMyCommands(
+  await bot.telegram.deleteMyCommands(
     { scope: { type: "chat", chat_id: ctx.chat!.id } }
   )
 
-  let message = 'Okay, end of role-play. '
+  let message = oneLine`
+    Okay, end of role-play.
+    How was it for you?
+  `
 
   switch (ctx.scene.state.role_play_kind) {
     case "practice_nvc":
-      message += oneLine`
-        Do you want to share anything about how it was to do?
-        And / or would you like to receive some feedback from me?
+      message = oneLine`
+        ${message}
+        Would you like to receive any feedback from me?
       `
       break
     case "feel_heard":
-      message += oneLine`
-        How was it for you?
+      message = oneLine`
+        ${message}
         Did you feel heard?
       `
       break
     case "see_example":
-      message += oneLine`
-        How was it for you?
+      message = oneLine`
+        ${message}
         Did you feel heard?
         Was it helpful in any way to see how I handled the situation?
       `
       break
     default:
-      message += oneLine`
-        How was it for you?
+      message = oneLine`
+        ${message}
         Do you have any reflections you want to share?
         Or how you're feeling right now?
       `

@@ -240,7 +240,7 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 		ctx.chatSession.messages.at(-1)!.tokens = promptTokens - sumTokens()
 	}
 
-	ctx.userSession.totalTokensUsed ??= sumTokens() + ctx.chatSession.messages.at(-1)!.tokens!
+	ctx.userSession.totalTokensUsed ||= sumTokens() + ctx.chatSession.messages.at(-1)!.tokens!
 	ctx.userSession.totalTokensUsed += completionResponse.usage?.total_tokens
 		?? ctx.userSession.totalTokensUsed + getTokens(assistantMessage.content)
 
