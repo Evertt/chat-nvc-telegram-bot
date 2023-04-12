@@ -203,7 +203,7 @@ rolePlayScene.action("see_example", async ctx => {
 
   const answer = await askAssistant(ctx, oneLine`
     Okay, so ${name} wants to see an example of how they could deal with the situation they have with ${theirReferral}.
-    So ${name}'ll will play ${theirReferral} and you'll play ${name} with NVC skills.
+    So ${name} will play ${theirReferral} and you'll play ${name} with NVC skills.
     ${other.type === "name" ? "" : `Since you don't yet know the name of ${theirReferral}, first ask ${name} the name of ${theirReferral}.`}
     ${other.type === "name" ? "Start" : "Then start"} the role-play and ask if they have a moment to talk.
     Wait for the response, if they say yes, then you'll start expressing your feelings and needs about the situation.

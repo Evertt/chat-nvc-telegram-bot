@@ -24,12 +24,17 @@ import { OPENAI_OVERLOADED_MESSAGE } from "./error-messages.ts"
 import { oneLine, oneLineCommaListsAnd, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
 import { isBotAskingForDonation } from "./donations.ts"
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const {
   TELEGRAM_WEBBOOK_TOKEN,
   DOMAIN = "",
   PORT,
 	PAYMENT_TOKEN = "",
+	EMAIL_HOST,
+	EMAIL_USERNAME,
+	EMAIL_PASSWORD,
+	EMAIL_PORT,
 } = Deno.env.toObject()
 
 addMiddlewaresToBot(bot)
@@ -103,25 +108,72 @@ bot.command("donate", async ctx => {
 	]))
 })
 
+bot.command("email", async ctx => {
+	if (ctx.chat.type !== "private") return
+
+	const emailEntity = ctx.message.entities?.find(e => e.type === "email")
+
+	if (!emailEntity) return ctx.reply(oneLine`
+		Please write your email address after the /email command.
+		So for example: /email example@gmail.com
+	`)
+
+	const email = ctx.message.text.slice(emailEntity.offset, emailEntity.offset + emailEntity.length)
+
+	console.log("email", email)
+
+	const messages = "<h1>Your Chat History</h1>\n<p>" + ctx.chatSession.messages.map(
+		msg => `<strong>${msg.name}:</strong> ${msg.message}`
+	).join("</p>\n<p>") + "</p>"
+
+	const client = new SMTPClient({
+		connection: {
+			hostname: EMAIL_HOST,
+			port: +EMAIL_PORT,
+			tls: true,
+			auth: {
+				username: EMAIL_USERNAME,
+				password: EMAIL_PASSWORD,
+			},
+		},
+	})
+
+	await client.send({
+		from: `ChatNVC <${EMAIL_USERNAME}>`,
+		to: `${ctx.from!.first_name} <${email}>`,
+		subject: "ChatNVC - Chat History",
+		content: "auto",
+		html: messages,
+	});
+	
+	await client.close()
+
+	await ctx.reply(oneLine`
+		Okay, I sent you an email with your chat history.
+		Please check your inbox and / or spambox.
+	`)
+})
+
 const getReply = async (ctx: MyContext) => {
 	const { chatMessages } = await getMessagesFromLastCheckpoint(ctx)
 
-	let moderationResult = await moderate(chatMessages.at(-1)!.content)
+	const moderationResult = await moderate(chatMessages.at(-1)!.content)
 	if (moderationResult) return oneLineCommaListsAnd`
 		Your message was flagged by OpenAI for ${moderationResult}.
 		Please try to rephrase your message. 🙏
 	`
 
-	const assistantResponse = await getAssistantResponse(ctx)
+	const assistantResponse = await getAssistantResponse(ctx, ctx.chatSession.storeMessages)
 	
-	moderationResult = await moderate(assistantResponse)
-	if (moderationResult) return oneLine`
-		Sorry, I was about to say something potentially inappropriate.
-		I don't know what happened.
-		Could you maybe try to rephrase your last message differently?
-		That might help me to formulate a more appropriate response.
-		Thank you. 🙏
-	`
+	// TODO: this information should already be in the assistant response
+	// moderationResult = await moderate(assistantResponse)
+	// if (moderationResult) return oneLine`
+	// 	Sorry, I was about to say something potentially inappropriate.
+	// 	I don't know what happened.
+	// 	Could you maybe try to rephrase your last message differently?
+	// 	That might help me to formulate a more appropriate response.
+	// 	Thank you. 🙏
+	// `
 
 	return assistantResponse
 }
@@ -191,15 +243,6 @@ const handler = async (ctx: Ctx) => {
 			"typing",
 			() => getReply(ctx)
 				.then(async reply => {
-					if (ctx.chatSession.storeMessages) {
-						ctx.chatSession.messages.push({
-							type: "text",
-							name: BOT_NAME,
-							message: reply,
-							date: Date(),
-						})
-					}
-
 					await ctx.reply(reply, { reply_to_message_id: ctx.message.message_id })
 				})
 				.catch(async error => {
@@ -213,13 +256,6 @@ const handler = async (ctx: Ctx) => {
 		"typing",
 		() => getReply(ctx)
 		.then(async reply => {
-			ctx.chatSession.messages.push({
-				type: "text",
-				name: BOT_NAME,
-				message: reply,
-				date: Date(),
-			})
-
 			const askForDonation =
 				PAYMENT_TOKEN
 				&& ctx.chat.type === "private"
