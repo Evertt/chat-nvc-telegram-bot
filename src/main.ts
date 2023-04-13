@@ -13,15 +13,13 @@ import { type Telegraf, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { getTranscription } from "./audio-transcriber.ts"
 import {
 	type Message,
-	moderate,
 	getAssistantResponse,
-	getMessagesFromLastCheckpoint,
 	requestTranscript,
 	fetchTranscript,
 	roundToSeconds,
 } from "./utils.ts"
 import { OPENAI_OVERLOADED_MESSAGE } from "./error-messages.ts"
-import { oneLine, oneLineCommaListsAnd, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
+import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
 import { isBotAskingForDonation } from "./donations.ts"
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
@@ -42,6 +40,18 @@ addMiddlewaresToBot(bot)
 addScenesToBot(bot)
 
 const me = await bot.telegram.getMe()
+
+const smtpClient = new SMTPClient({
+	connection: {
+		hostname: EMAIL_HOST,
+		port: +EMAIL_PORT,
+		tls: true,
+		auth: {
+			username: EMAIL_USERNAME,
+			password: EMAIL_PASSWORD,
+		},
+	},
+})
 
 bot.start(async ctx => {
 	console.log("start command")
@@ -128,19 +138,7 @@ bot.command("email", async ctx => {
 		msg => `<strong>${msg.name}:</strong> ${msg.message}`
 	).join("</p>\n<p>") + "</p>"
 
-	const client = new SMTPClient({
-		connection: {
-			hostname: EMAIL_HOST,
-			port: +EMAIL_PORT,
-			tls: true,
-			auth: {
-				username: EMAIL_USERNAME,
-				password: EMAIL_PASSWORD,
-			},
-		},
-	})
-
-	await client.send({
+	await smtpClient.send({
 		from: `ChatNVC <${EMAIL_USERNAME}>`,
 		to: `${ctx.from!.first_name} <${email}>`,
 		subject: "ChatNVC - Chat History",
@@ -148,7 +146,7 @@ bot.command("email", async ctx => {
 		html: messages,
 	});
 	
-	await client.close()
+	await smtpClient.close()
 
 	await ctx.reply(oneLine`
 		Okay, I sent you an email with your chat history.
@@ -156,28 +154,54 @@ bot.command("email", async ctx => {
 	`)
 })
 
-const getReply = async (ctx: MyContext) => {
-	const { chatMessages } = await getMessagesFromLastCheckpoint(ctx)
+bot.command("feedback", async ctx => {
+	if (ctx.chat.type !== "private") return
 
-	const moderationResult = await moderate(chatMessages.at(-1)!.content)
-	if (moderationResult) return oneLineCommaListsAnd`
-		Your message was flagged by OpenAI for ${moderationResult}.
-		Please try to rephrase your message. 🙏
+	const feedback = ctx.message.text.slice(9).trim()
+
+	if (!feedback) {
+		return ctx.reply(oneLine`
+			Please write your feedback after the /feedback command.
+			So for example: /feedback I would really like if the bot could do [something].
+		`)
+	}
+
+	const msg = await ctx.reply(oneLine`
+		Thank you for the feedback, I will email it to my developer.
+	`)
+
+	const name = ctx.from.first_name
+
+	const feedbackHTML = stripIndents`
+		<h1>Feedback from ${name} about ChatNVC</h1>
+		<p>${feedback}</p>
 	`
 
-	const assistantResponse = await getAssistantResponse(ctx, ctx.chatSession.storeMessages)
+	await smtpClient.send({
+		from: `${name} from Telegram <noreply@devign.nl>`,
+		to: `Evert van Brussel <ecvanbrussel@gmail.com>`,
+		subject: "ChatNVC - Feedback",
+		content: "auto",
+		html: feedbackHTML,
+	});
 	
-	// TODO: this information should already be in the assistant response
-	// moderationResult = await moderate(assistantResponse)
-	// if (moderationResult) return oneLine`
-	// 	Sorry, I was about to say something potentially inappropriate.
-	// 	I don't know what happened.
-	// 	Could you maybe try to rephrase your last message differently?
-	// 	That might help me to formulate a more appropriate response.
-	// 	Thank you. 🙏
-	// `
+	await smtpClient.close()
 
-	return assistantResponse
+	await ctx.telegram.deleteMessage(ctx.chat.id, msg.message_id)
+
+	await ctx.reply(
+		oneLine`
+			The feedback email has been sent. :-)
+		`
+	)
+})
+
+const getReply = (ctx: MyContext) => {
+	return getAssistantResponse(ctx, ctx.chatSession.storeMessages)
+	.catch((errorResponse: string) => {
+		console.error("Error assistant response:", errorResponse)
+		return errorResponse
+	})
 }
 
 // @ts-expect-error trust me
@@ -245,11 +269,8 @@ const handler = async (ctx: Ctx) => {
 			"typing",
 			() => getReply(ctx)
 				.then(async reply => {
+					if (!ctx.chatSession.storeMessages) ctx.chatSession.messages = []
 					await ctx.reply(reply, { reply_to_message_id: ctx.message.message_id })
-				})
-				.catch(async error => {
-					console.error(error)
-					await ctx.reply(OPENAI_OVERLOADED_MESSAGE)
 				})
 		)
 	}
@@ -278,13 +299,6 @@ const handler = async (ctx: Ctx) => {
 						]
 					])
 				)
-		})
-		.catch(async error => {
-			console.log("Error:", error)
-
-			await ctx.reply(
-				OPENAI_OVERLOADED_MESSAGE,
-			)
 		})
 	)
 }

@@ -13,7 +13,8 @@ import { getTokens, MAX_TOKENS } from "./tokenizer.ts"
 // @deno-types="npm:@types/lodash-es@4.17.6"
 import { findLastIndex, memoize } from "npm:lodash-es@4.17.21"
 import { type IntroData, getSystemPrompt } from "./system-prompt.ts"
-import { oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
+import { oneLine, oneLineCommaListsAnd } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
+import { OPENAI_OVERLOADED_MESSAGE } from "./error-messages.ts"
 
 export type Message = MyContext["chatSession"]["messages"][number]
 
@@ -149,7 +150,7 @@ export const convertToChatMessages = (messages: Message[], allNames: string[], e
 	const chatMessages: MyChatCompletionRequestMessage[] = messages.map(msg => ({
 		role: msg.name === "system" ? "system" : /chatnvc/i.test(msg.name) ? "assistant" : "user",
 		content: `${excludeNames || [BOT_NAME, "system"].includes(msg.name) ? '' : msg.name + ": "}${msg.message}`,
-		tokens: (excludeNames || [BOT_NAME, "system"].includes(msg.name) ? 0 : getTokens(msg.name + ": ")) + (msg.tokens ??= getTokens(msg.message) + 4),
+		tokens: (excludeNames || [BOT_NAME, "system"].includes(msg.name) ? 0 : getTokens(msg.name + ": ")) + ((msg.tokens ??= getTokens(msg.message)) + 4),
 	}))
 
 	const systemPrompt = getSystemPrompt(
@@ -197,6 +198,21 @@ export const needsNewCheckPoint = (messages: Message[], chatMessages: MyChatComp
 export async function getAssistantResponse(ctx: MyContext, saveInSession = true, temperature = 0.9) {
 	const { chatMessages } = await getMessagesFromLastCheckpoint(ctx)
 
+	const moderationResult = await moderate(chatMessages.at(-1)!.content)
+	const moderationTokens = ctx.chatSession.messages.at(-1)!.tokens ??= getTokens(ctx.chatSession.messages.at(-1)!.message)
+	const moderationCost = (moderationTokens / 1000) * 0.002
+	ctx.userSession.cost += moderationCost
+	ctx.userSession.totalTokensUsed += moderationTokens
+	
+	if (moderationResult) {
+		ctx.chatSession.messages.pop()
+
+		throw oneLineCommaListsAnd`
+			Your message was flagged by OpenAI for ${moderationResult}.
+			Please try to rephrase your message. 🙏
+		`
+	}
+
 	const chatRequestOpts: CreateChatCompletionRequest = {
 		model: "gpt-3.5-turbo",
 		temperature,
@@ -215,46 +231,74 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 		body: JSON.stringify(chatRequestOpts)
 	})
 
-	if(!chatResponse.ok) {
-		const err = await chatResponse.text()
-		throw new Error(err)
+	if (!chatResponse.ok) {
+		console.log("OpenAI error (maybe overloaded?):", await chatResponse.text())
+		throw OPENAI_OVERLOADED_MESSAGE
 	}
 
 	const completionResponse = await chatResponse.json() as CreateChatCompletionResponse
 	const assistantMessage = completionResponse.choices[0]?.message
-
-	if (!assistantMessage) {
-		throw new Error("OpenAI returned an empty response")
-	}
-
-	assistantMessage.content = assistantMessage.content
-		.replace(/^chatnvc\w*: /i, "")
+	const finishReason = completionResponse.choices[0]?.finish_reason
 
 	const sumTokens = memoize(() => ctx.chatSession.messages.slice(0, -1).reduce(
-		(sum, msg) => sum + (msg.tokens ??= getTokens(msg.message) + 4),
-		0
+		(sum, msg) => sum + ((msg.tokens ??= getTokens(msg.message)) + 4),
+		chatMessages[0].tokens ??= getTokens(chatMessages[0].content) + 4
 	))
 
 	if (ctx.chatSession.messages.at(-1)!.tokens == null) {
-		const promptTokens = completionResponse.usage?.prompt_tokens ?? getTokens(assistantMessage.content)
-		ctx.chatSession.messages.at(-1)!.tokens = promptTokens - sumTokens()
+		const promptTokens = completionResponse.usage?.prompt_tokens ?? sumTokens()
+		ctx.chatSession.messages.at(-1)!.tokens = Math.max((promptTokens - sumTokens()), getTokens(ctx.chatSession.messages.at(-1)!.message))
 	}
 
-	ctx.userSession.totalTokensUsed ||= sumTokens() + ctx.chatSession.messages.at(-1)!.tokens!
-	ctx.userSession.totalTokensUsed += completionResponse.usage?.total_tokens
-		?? ctx.userSession.totalTokensUsed + getTokens(assistantMessage.content)
+	ctx.userSession.totalTokensUsed ||= sumTokens() + ctx.chatSession.messages.at(-1)!.tokens! + 4
+	const totalAddedTokens = completionResponse.usage?.total_tokens
+		?? ctx.userSession.totalTokensUsed + getTokens(assistantMessage?.content) + 4
+	const totalAddedCost = (totalAddedTokens / 1000) * 0.002
+	ctx.userSession.totalTokensUsed += totalAddedTokens
+	ctx.userSession.cost += totalAddedCost
 
-	if (saveInSession) {
+	ctx.userSession.cost += moderationCost + totalAddedCost
+	ctx.userSession.requests.push({
+		totalTokensUsed: moderationTokens + totalAddedTokens,
+		cost: moderationCost + totalAddedCost,
+		date: new Date()
+	})
+
+	if (finishReason === "content_filter") {
+		ctx.chatSession.messages.pop()
+
+		throw oneLine`
+			Sorry, I was about to say something potentially inappropriate.
+			I don't know what happened.
+			Could you maybe try to rephrase your last message differently?
+			That might help me to formulate a more appropriate response.
+			Thank you. 🙏
+		`
+	}
+
+	if (!assistantMessage) {
+		throw oneLine`
+			OpenAI returned an empty response.
+			I have no idea why. Maybe try again later?
+		`
+	}
+
+	const content = assistantMessage.content
+		.replace(/^chatnvc\w*: /i, "")
+
+	if (!saveInSession) ctx.chatSession.messages.pop()
+	else {
 		ctx.chatSession.messages.push({
 			type: "text",
 			name: BOT_NAME,
-			message: assistantMessage.content,
+			message: content,
 			date: Date(),
-			tokens: completionResponse.usage?.completion_tokens,
+			tokens: completionResponse.usage?.completion_tokens
+				|| (getTokens(assistantMessage.content) + 4),
 		})
 	}
 
-	return assistantMessage.content
+	return content
 }
 
 export const askAssistant = async (ctx: MyContext, question: string, saveInSession = false) => {
@@ -266,18 +310,14 @@ export const askAssistant = async (ctx: MyContext, question: string, saveInSessi
 	})
 
 	const answer = await getAssistantResponse(ctx, saveInSession, 0.2)
-	
-	console.log("Assistant answer:", answer)
-
-	if (!saveInSession) ctx.chatSession.messages.pop()
-	else {
-		ctx.chatSession.messages.push({
-			type: "text",
-			name: BOT_NAME,
-			message: answer,
-			date: Date(),
+		.then(answer => {
+			console.log("Assistant answer:", answer)
+			return answer
 		})
-	}
+		.catch((errorAnswer: string) => {
+			console.error("Error response:", errorAnswer)
+			return errorAnswer
+		})
 
 	return answer
 }

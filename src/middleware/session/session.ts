@@ -29,9 +29,15 @@ export interface UserSettings {
 export interface UserSession {
   haveSpokenBefore: boolean
   settings: UserSettings
+  cost: number
   totalTokensUsed: number
   totalTokensPaidFor: number
   totalTokensGifted: number
+  requests: {
+    totalTokensUsed: number
+    cost: number
+    date: Date
+  }[]
 }
 
 export interface UserChatSession {
@@ -122,9 +128,11 @@ export const userSessionMiddleware = session<UserSession, MyContext, "userSessio
       receiveVoiceTranscriptions: true,
       askForDonation: true,
     },
+    cost: 0,
     totalTokensUsed: 0,
     totalTokensPaidFor: 0,
     totalTokensGifted: 200_000,
+    requests: [],
   }),
   getSessionKey: ctx => Promise.resolve(
     ctx.from ? `user:${ctx.from.id}` : undefined
