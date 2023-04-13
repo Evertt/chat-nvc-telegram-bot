@@ -309,10 +309,7 @@ const handler = async (ctx: Ctx) => {
 bot.on("text", handler)
 bot.on(message("voice"), async ctx => {
 	await ctx.reply(oneLine`
-		Thanks for sharing your voice message. Just to let you know,
-		I'm currently transcribing it, so I can read it, and that
-		takes me at the very least 30 seconds.
-		But I'll get back to you as soon as I can.
+		Thanks for sharing, I'm listening.
 	`)
 
 	const { file_id } = ctx.message.voice
