@@ -2,6 +2,7 @@ import { bot, type MyContext, BOT_NAME } from "../bot.ts"
 import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { askAssistant, type Modify } from "../utils.ts"
+import { getTokens } from "../tokenizer.ts"
 
 export const ROLE_PLAY_SCENE = "ROLE_PLAY"
 
@@ -99,6 +100,7 @@ rolePlayScene.enter(async ctx => {
     type: "text",
     message: "Can we do a role-play?",
     date: Date(),
+    tokens: getTokens("Can we do a role-play?"),
   })
 
   const reply = myReferral === "?"
@@ -142,6 +144,7 @@ rolePlayScene.enter(async ctx => {
     name: BOT_NAME,
     message: reply,
     date: Date(),
+    tokens: getTokens(reply),
   })
 
   bot.telegram.setMyCommands(
@@ -269,5 +272,6 @@ rolePlayScene.leave(async ctx => {
     name: BOT_NAME,
     message,
     date: Date(),
+    tokens: getTokens(message),
   })
 })

@@ -1,58 +1,22 @@
 // deno-lint-ignore-file no-explicit-any
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-import { Scenes } from "npm:telegraf@4.12.3-canary.1"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.20.0"
-import { type Context, session } from "npm:telegraf@4.12.3-canary.1"
-import type { LatestSession } from "../deprecated/session/versions/all.ts"
-export { sessionVersions } from "../deprecated/session/versions/all.ts"
-import type { MyContext } from "../../bot.ts"
+import { type Context, session, type MiddlewareFn } from "npm:telegraf@4.12.3-canary.1"
+import { latestSessions } from "./versions/all.ts"
+export { sessionVersions, type SceneSessionData } from "./versions/all.ts"
 
 const {
   SUPABASE_URL,
   SUPABASE_KEY,
 } = Deno.env.toObject()
 
-type Message = LatestSession["messages"][number]
+type LatestSessions = typeof latestSessions
 
-export interface ChatSession {
-  messages: Message[]
-  storeMessages: boolean
-  language_code: string
-  type: "private" | "group"
+type AllMySessions = {
+  [K in keyof LatestSessions]: ReturnType<LatestSessions[K]>
 }
 
-export interface UserSettings {
-  receiveVoiceTranscriptions: boolean
-  askForDonation: boolean
-}
-
-export interface UserSession {
-  haveSpokenBefore: boolean
-  settings: UserSettings
-  cost: number
-  totalTokensUsed: number
-  totalTokensPaidFor: number
-  totalTokensGifted: number
-  requests: {
-    totalTokensUsed: number
-    cost: number
-    date: Date
-  }[]
-}
-
-export interface UserChatSession {
-  __scenes: Scenes.SceneSessionData
-}
-
-export type SceneSessionData = UserChatSession["__scenes"]
-
-export type AllMySessions = {
-  chatSession: ChatSession,
-  userSession: UserSession,
-  session: UserChatSession,
-}
-
-export type ContextWithMultiSession<C extends Context = Context> = C & AllMySessions
+export type ContextWithMultiSession = Context & AllMySessions
 
 const supabase = createClient(
   SUPABASE_URL,
@@ -106,49 +70,32 @@ export const supabaseStore: AsyncSessionStore<any> = {
   },
 }
 
-export const chatSessionMiddleware = session<ChatSession, MyContext, "chatSession">({
-  store: supabaseStore,
-  defaultSession: ctx => ({
-    messages: [],
-    storeMessages: ctx.chat?.type === "private",
-    language_code: ctx.chat?.type !== "private" ? "en" : ctx.from?.language_code ?? "en",
-    type: ctx.chat?.type === "private" ? "private" : "group",
-  }),
-  getSessionKey: ctx => Promise.resolve(
+const sessionKeyFactories: {
+  [K in keyof LatestSessions]: (ctx: ContextWithMultiSession) => Promise<string | undefined>
+} = {
+  chatSession: ctx => Promise.resolve(
     ctx.chat ? `chat:${ctx.chat.id}` : undefined
   ),
-  property: "chatSession",
-})
-
-export const userSessionMiddleware = session<UserSession, MyContext, "userSession">({
-  store: supabaseStore,
-  defaultSession: () => ({
-    haveSpokenBefore: false,
-    settings: {
-      receiveVoiceTranscriptions: true,
-      askForDonation: true,
-    },
-    cost: 0,
-    totalTokensUsed: 0,
-    totalTokensPaidFor: 0,
-    totalTokensGifted: 200_000,
-    requests: [],
-  }),
-  getSessionKey: ctx => Promise.resolve(
+  userSession: ctx => Promise.resolve(
     ctx.from ? `user:${ctx.from.id}` : undefined
   ),
-  property: "userSession",
-})
-
-export const userChatSession = session<UserChatSession, MyContext, "session">({
-  store: supabaseStore,
-  defaultSession: () => ({
-    __scenes: {},
-  }),
-  getSessionKey: ctx => Promise.resolve(
+  session: ctx => Promise.resolve(
     ctx.chat && ctx.from ? `chat:${ctx.chat.id};user:${ctx.from.id}` : undefined
   ),
-  property: "session",
-})
+}
 
-export { type LatestSession as Session }
+const sessionMiddlewares: MiddlewareFn<ContextWithMultiSession>[] = []
+
+for (const property in latestSessions) {
+  const key = property as keyof LatestSessions
+  sessionMiddlewares.push(session({
+    property,
+    store: supabaseStore,
+    defaultSession: latestSessions[key],
+    getSessionKey: sessionKeyFactories[key],
+  }))
+}
+
+export { sessionMiddlewares }
+
+export { type LatestSessions as Sessions }

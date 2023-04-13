@@ -199,10 +199,7 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 	const { chatMessages } = await getMessagesFromLastCheckpoint(ctx)
 
 	const moderationResult = await moderate(chatMessages.at(-1)!.content)
-	const moderationTokens = ctx.chatSession.messages.at(-1)!.tokens ??= getTokens(ctx.chatSession.messages.at(-1)!.message)
-	const moderationCost = (moderationTokens / 1000) * 0.002
-	ctx.userSession.cost += moderationCost
-	ctx.userSession.totalTokensUsed += moderationTokens
+	ctx.userSession.tokens.used += chatMessages.at(-1)!.tokens
 	
 	if (moderationResult) {
 		ctx.chatSession.messages.pop()
@@ -250,19 +247,9 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 		ctx.chatSession.messages.at(-1)!.tokens = Math.max((promptTokens - sumTokens()), getTokens(ctx.chatSession.messages.at(-1)!.message))
 	}
 
-	ctx.userSession.totalTokensUsed ||= sumTokens() + ctx.chatSession.messages.at(-1)!.tokens! + 4
-	const totalAddedTokens = completionResponse.usage?.total_tokens
-		?? ctx.userSession.totalTokensUsed + getTokens(assistantMessage?.content) + 4
-	const totalAddedCost = (totalAddedTokens / 1000) * 0.002
-	ctx.userSession.totalTokensUsed += totalAddedTokens
-	ctx.userSession.cost += totalAddedCost
-
-	ctx.userSession.cost += moderationCost + totalAddedCost
-	ctx.userSession.requests.push({
-		totalTokensUsed: moderationTokens + totalAddedTokens,
-		cost: moderationCost + totalAddedCost,
-		date: new Date()
-	})
+	ctx.userSession.tokens.used ||= sumTokens() + ctx.chatSession.messages.at(-1)!.tokens! + 4
+	ctx.userSession.tokens.used += completionResponse.usage?.total_tokens
+		?? ctx.userSession.tokens.used + getTokens(assistantMessage?.content) + 4
 
 	if (finishReason === "content_filter") {
 		ctx.chatSession.messages.pop()
@@ -307,6 +294,7 @@ export const askAssistant = async (ctx: MyContext, question: string, saveInSessi
 		name: "system",
 		message: question,
 		date: Date(),
+		tokens: getTokens(question),
 	})
 
 	const answer = await getAssistantResponse(ctx, saveInSession, 0.2)

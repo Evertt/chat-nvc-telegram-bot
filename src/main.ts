@@ -18,11 +18,11 @@ import {
 	fetchTranscript,
 	roundToSeconds,
 } from "./utils.ts"
-import { OPENAI_OVERLOADED_MESSAGE } from "./error-messages.ts"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
 import { isBotAskingForDonation } from "./donations.ts"
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { getTokens } from "./tokenizer.ts"
 
 const {
   TELEGRAM_WEBBOOK_TOKEN,
@@ -85,6 +85,7 @@ bot.start(async ctx => {
 			name: BOT_NAME,
 			message: greeting,
 			date: Date(),
+			tokens: getTokens(greeting),
 		}
 	]
 
@@ -219,6 +220,7 @@ const handler = async (ctx: Ctx) => {
 		name: ctx.from.first_name,
 		message: text,
 		date: Date(),
+		tokens: getTokens(text),
 	}
 
 	if (ctx.chatSession.storeMessages) {
@@ -262,6 +264,7 @@ const handler = async (ctx: Ctx) => {
 				name: reply.from!.first_name,
 				message: text,
 				date: new Date(reply.date).toString(),
+				tokens: getTokens(text),
 			})
 		}
 
