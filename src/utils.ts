@@ -119,7 +119,7 @@ export const getMessagesFromLastCheckpoint = async (ctx: MyContext) => {
 	const allNames = getNamesFromMessages(messages)
 	let chatMessages = convertToChatMessages(messagesFromLastCheckpoint, allNames, chatIsPrivate, chatIsPrivate ? "empathy" : "translation")
 
-	const n = needsNewCheckPoint(messagesFromLastCheckpoint, chatMessages)
+	const n = needsNewCheckPoint([ ...messagesFromLastCheckpoint ], chatMessages)
 
 	if (n) {
 		const lastMessages = messagesFromLastCheckpoint.splice(-n)
