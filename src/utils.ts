@@ -119,10 +119,11 @@ export const getMessagesFromLastCheckpoint = async (ctx: MyContext) => {
 	const allNames = getNamesFromMessages(messages)
 	let chatMessages = convertToChatMessages(messagesFromLastCheckpoint, allNames, chatIsPrivate, chatIsPrivate ? "empathy" : "translation")
 
-	const n = needsNewCheckPoint([ ...messagesFromLastCheckpoint ], chatMessages)
+	const lastMessages = needsNewCheckPoint(
+		messagesFromLastCheckpoint, chatMessages
+	)
 
-	if (n) {
-		const lastMessages = messagesFromLastCheckpoint.splice(-n)
+	if (lastMessages.length) {
 		ctx.chatSession.messages = messagesFromLastCheckpoint
 		await summarize(ctx)
 		ctx.chatSession.messages.push(...lastMessages)
@@ -130,7 +131,6 @@ export const getMessagesFromLastCheckpoint = async (ctx: MyContext) => {
 			...messages.slice(0, i),
 			...ctx.chatSession.messages
 		]
-
 		i = findLastIndex(ctx.chatSession.messages, message => !!message.checkpoint)
 		messagesFromLastCheckpoint = ctx.chatSession.messages.slice(i)
 		chatMessages = convertToChatMessages(messagesFromLastCheckpoint, allNames, chatIsPrivate, chatIsPrivate ? "empathy" : "translation")
@@ -192,7 +192,7 @@ export const needsNewCheckPoint = (messages: Message[], chatMessages: MyChatComp
 	if (tokenCount >= MAX_TOKENS)
 		throw new Error("Messages too long to summarize")
 
-	return lastMessages.length
+	return lastMessages
 }
 
 export async function getAssistantResponse(ctx: MyContext, saveInSession = true, temperature = 0.9) {
