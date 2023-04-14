@@ -16,7 +16,6 @@ export const migrate = <
     const version = "version" in session ? session.version as number : 1
     const newSession = sessionVersions[version - 1][key](ctx)
     session = Object.assign(newSession, session)
-    console.log("version:", version, session)
   }
 
   const versions = sessionVersions.map(v => v[key](ctx))
