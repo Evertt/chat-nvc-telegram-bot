@@ -413,19 +413,8 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
     }
   : undefined
 
-// Enable graceful stop
-Deno.addSignalListener("SIGINT", () => {
-  bot.stop("SIGINT")
-  Deno.exit()
-})
-
-Deno.addSignalListener("SIGTERM", () => {
-  bot.stop("SIGTERM")
-  Deno.exit()
-})
-
 console.log("Starting bot...")
-bot.launch({ webhook, dropPendingUpdates: true })
+bot.launch({ webhook, dropPendingUpdates: !!webhook })
 	.catch(error => {
 		console.error(error)
 		Deno.exit(1)

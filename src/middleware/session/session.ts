@@ -8,6 +8,7 @@ export { sessionVersions, type SceneSessionData } from "./versions/all.ts"
 const {
   SUPABASE_URL,
   SUPABASE_KEY,
+  SUPABASE_PREFIX = ""
 } = Deno.env.toObject()
 
 type LatestSessions = typeof latestSessions
@@ -74,13 +75,13 @@ const sessionKeyFactories: {
   [K in keyof LatestSessions]: (ctx: ContextWithMultiSession) => Promise<string | undefined>
 } = {
   chatSession: ctx => Promise.resolve(
-    ctx.chat ? `chat:${ctx.chat.id}` : undefined
+    ctx.chat ? `${SUPABASE_PREFIX}chat:${ctx.chat.id}` : undefined
   ),
   userSession: ctx => Promise.resolve(
-    ctx.from ? `user:${ctx.from.id}` : undefined
+    ctx.from ? `${SUPABASE_PREFIX}user:${ctx.from.id}` : undefined
   ),
   session: ctx => Promise.resolve(
-    ctx.chat && ctx.from ? `chat:${ctx.chat.id};user:${ctx.from.id}` : undefined
+    ctx.chat && ctx.from ? `${SUPABASE_PREFIX}chat:${ctx.chat.id};user:${ctx.from.id}` : undefined
   ),
 }
 
