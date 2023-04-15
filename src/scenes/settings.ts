@@ -1,11 +1,12 @@
 import type { MyContext } from "../bot.ts"
 import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { stripIndents, oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
+import type { ConditionalPick } from "npm:type-fest@3.6.1"
 
 export const SETTINGS_SCENE = "SETTINGS"
 export const settingsScene = new Scenes.BaseScene<MyContext>(SETTINGS_SCENE)
 
-type SettingsKeys = keyof MyContext["userSession"]["settings"]
+type SettingsKeys = keyof ConditionalPick<MyContext["userSession"]["settings"], boolean>
 
 type SettingsMenuState = {
   settingsMessageId?: number
@@ -19,18 +20,18 @@ type SettingsMenu = {
   }
 }
 
-const settingsMenu = {
+const settingsMenu: Partial<SettingsMenu> = {
   receiveVoiceTranscriptions: {
     subject: "transcriptions of my voice messages",
     verb: "receive",
     type: "boolean",
   },
   notifyOnShutdownDuringTesting: {
-    subject: "notifications when the bot is shut down during testing",
+    subject: "notifications when the test-bot is rebooted",
     verb: "receive",
     type: "boolean",
   }
-} as SettingsMenu
+}
 
 settingsScene.enter(async ctx => {
   console.log("Entering settings scene...")
