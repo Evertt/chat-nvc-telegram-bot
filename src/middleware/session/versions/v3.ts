@@ -1,50 +1,33 @@
 import { Modify } from "../../../utils.ts"
-import type { NewSession } from "../new-session.ts"
+import { type NewSession } from "../new-session.ts"
 import { type Context } from "npm:telegraf@4.12.3-canary.1"
 import {
+  MARKUP,
   UserSession as PrevUserSession,
   Sessions as PrevSessions,
   sessions as prevSessions,
-  UserSettings,
-} from "./v1.ts"
-export * from "./v1.ts"
-import type { Simplify } from "npm:type-fest@3.6.1"
+  UserSettings as PrevUserSettings,
+} from "./v2.ts"
+export * from "./v2.ts"
 
-export const MARKUP = 2
-
-export type TokenStats = {
-  used: number
-  paidFor: number
-  gifted: number
-}
+export type UserSettings = Modify<PrevUserSettings, {
+  backendAssistant: "ChatGPT" | "Claude"
+}>
 
 export type NewUserSession = Modify<PrevUserSession, {
   version: never
-  cost: never
-
-  readonly wholesaleCost: number
-  readonly retailPrice: number
-  readonly tokensPerRetailDollar: number
-
-  totalTokensUsed: never
-  totalTokensPaidFor: never
-  totalTokensGifted: never
-
-  tokens: TokenStats
-
-  requests: number
-  language_code: string
+  settings: UserSettings
 }> & NewSession<PrevUserSession>
 
-type NewPrevUserSession = Simplify<Pick<NewUserSession, "migrate">>
-
 export class UserSession implements NewUserSession {
-  readonly version: 2 = 2
+  readonly version: 3 = 3
+
   haveSpokenBefore = false
 
   settings: UserSettings = {
 		receiveVoiceTranscriptions: true,
 		askForDonation: true,
+    backendAssistant: "ChatGPT",
 	}
 
   get wholesaleCost() {
@@ -89,18 +72,10 @@ export class UserSession implements NewUserSession {
     this.language_code = ctx.from?.language_code ?? "en"
   }
 
+  // @ts-expect-error trust me...
   migrate(prevUserSession: PrevUserSession) {
-    this.haveSpokenBefore = prevUserSession.haveSpokenBefore
-
-    this.settings = prevUserSession.settings
-
-    this.tokens = {
-      used: prevUserSession.totalTokensUsed,
-      paidFor: prevUserSession.totalTokensPaidFor,
-      gifted: Math.max(prevUserSession.totalTokensGifted, this.tokens.gifted),
-    }
-
-    this.requests = prevUserSession.requests.length
+    Object.assign(this, prevUserSession)
+    this.settings.backendAssistant = "ChatGPT"
 
     return this
   }
