@@ -8,7 +8,6 @@ import {
   UserSettings,
 } from "./v1.ts"
 export * from "./v1.ts"
-import type { Simplify } from "npm:type-fest@3.6.1"
 
 export const MARKUP = 2
 
@@ -35,8 +34,6 @@ export type NewUserSession = Modify<PrevUserSession, {
   requests: number
   language_code: string
 }> & NewSession<PrevUserSession>
-
-type NewPrevUserSession = Simplify<Pick<NewUserSession, "migrate">>
 
 export class UserSession implements NewUserSession {
   readonly version: 2 = 2
