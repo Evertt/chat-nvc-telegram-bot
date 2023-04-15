@@ -23,6 +23,9 @@ export const migrate = <
     version => version instanceof session.constructor
   )
 
+  if (versions[0].constructor.name  === "UserSession")
+    console.log("i", i, versions.length - 1)
+
   if (i === -1) {
     throw new Error('Session version not found')
   }
@@ -33,7 +36,12 @@ export const migrate = <
 
   const nextVersions = versions.slice(i + 1) // as unknown as NextSessions
 
+  if (versions[0].constructor.name  === "UserSession")
+    console.log("nextVersions:", nextVersions)
+
   return nextVersions.reduce((prevVersion, nextVersion) => {
+    if (nextVersion.constructor.name  === "UserSession")
+      console.log('"migrate" in nextVersion', "migrate" in nextVersion)
     return "migrate" in nextVersion ? (nextVersion as any).migrate(prevVersion) : prevVersion
   }, session as any) as Ctx[Key]
 }

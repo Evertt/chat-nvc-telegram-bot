@@ -11,6 +11,7 @@ import {
 export * from "./v2.ts"
 
 export type UserSettings = Modify<PrevUserSettings, {
+  notifyOnShutdownDuringTesting: boolean
   backendAssistant: "ChatGPT" | "Claude"
 }>
 
@@ -25,6 +26,7 @@ export class UserSession implements NewUserSession {
   haveSpokenBefore = false
 
   settings: UserSettings = {
+    notifyOnShutdownDuringTesting: false,
 		receiveVoiceTranscriptions: true,
 		askForDonation: true,
     backendAssistant: "ChatGPT",
@@ -74,8 +76,11 @@ export class UserSession implements NewUserSession {
 
   // @ts-expect-error trust me...
   migrate(prevUserSession: PrevUserSession) {
+    // @ts-expect-error trust me...
+    delete prevUserSession.version
     Object.assign(this, prevUserSession)
     this.settings.backendAssistant = "ChatGPT"
+    this.settings.notifyOnShutdownDuringTesting = false
 
     return this
   }

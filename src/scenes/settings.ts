@@ -25,6 +25,11 @@ const settingsMenu = {
     verb: "receive",
     type: "boolean",
   },
+  notifyOnShutdownDuringTesting: {
+    subject: "notifications when the bot is shut down during testing",
+    verb: "receive",
+    type: "boolean",
+  }
 } as SettingsMenu
 
 settingsScene.enter(async ctx => {

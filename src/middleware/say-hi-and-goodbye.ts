@@ -1,8 +1,8 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-import { type MiddlewareFn, Context } from "npm:telegraf@4.12.3-canary.1"
+import { type MiddlewareFn } from "npm:telegraf@4.12.3-canary.1"
 import { oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { Message } from "npm:telegraf@4.12.3-canary.1/types"
-import { supabaseStore } from "./session/session.ts"
+import { supabaseStore, type ContextWithMultiSession } from "./session/session.ts"
 import { bot } from "../bot.ts"
 
 type ChatId = number
@@ -17,8 +17,9 @@ const {
 
 const recentChatsStoreId = `${SUPABASE_PREFIX}recentChats`
 
-export const saveRecentChatsMiddleware: MiddlewareFn<Context> =
-  (ctx, next: (ctx: Context) => Promise<void>) => {
+export const saveRecentChatsMiddleware: MiddlewareFn<ContextWithMultiSession> =
+  (ctx, next: (ctx: ContextWithMultiSession) => Promise<void>) => {
+    if (!ctx.userSession.settings.notifyOnShutdownDuringTesting) return next(ctx)
     if (!DOMAIN && ctx.chat?.type === "private") {
       recentChatIds.set(ctx.chat.id, Date.now())
       console.log("saved recent chat:", ctx.chat.id)

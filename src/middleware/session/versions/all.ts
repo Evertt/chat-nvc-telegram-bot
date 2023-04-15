@@ -2,7 +2,7 @@ import type { Union2Tuple, FixedLengthArray } from "../../../utils.ts"
 import type { LastArrayElement, Simplify } from "npm:type-fest@3.6.1"
 import { sessions as sessionsV1 } from "./v1.ts"
 import { sessions as sessionsV2 } from "./v2.ts"
-import { sessions as sessionsV3 } from "./v2.ts"
+import { sessions as sessionsV3 } from "./v3.ts"
 
 export const sessionVersions = [
   sessionsV1,
