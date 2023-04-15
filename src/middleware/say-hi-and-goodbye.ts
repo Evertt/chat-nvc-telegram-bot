@@ -19,10 +19,12 @@ const recentChatsStoreId = `${SUPABASE_PREFIX}recentChats`
 
 export const saveRecentChatsMiddleware: MiddlewareFn<ContextWithMultiSession> =
   (ctx, next: (ctx: ContextWithMultiSession) => Promise<void>) => {
-    if (!ctx.userSession.settings.notifyOnShutdownDuringTesting) return next(ctx)
-    if (!DOMAIN && ctx.chat?.type === "private") {
+    if (DOMAIN || ctx.chat?.type !== "private") return next(ctx)
+    if (!ctx.userSession.settings.notifyOnShutdownDuringTesting) {
+      recentChatIds.delete(ctx.chat.id)
+    }
+    else {
       recentChatIds.set(ctx.chat.id, Date.now())
-      console.log("saved recent chat:", ctx.chat.id)
     }
     return next(ctx)
   }
