@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.20.0"
 import { type Context, session, type MiddlewareFn } from "npm:telegraf@4.12.3-canary.1"
 import { latestSessions } from "./versions/all.ts"
 export { sessionVersions, type SceneSessionData } from "./versions/all.ts"
+// import { getTokens } from "../../tokenizer.ts"
 
 const {
   SUPABASE_URL,
@@ -23,6 +24,30 @@ const supabase = createClient(
   SUPABASE_URL,
   SUPABASE_KEY,
 )
+
+// const { data } = await supabase
+//   .from("sessions")
+//   .select()
+//   .like("id", `chat:%`)
+//   .not("id", "like", "%;user:%")
+
+// for (const row of data!) {
+//   const { id, session } = row as { id: string, session: AllMySessions["chatSession"] }
+//   let changed = false
+
+//   for (const message of session.messages) {
+//     const newTokenCount = getTokens(message.message)
+//     if (newTokenCount !== message.tokens) {
+//       console.log(`Updating tokens for message from ${message.tokens} to ${newTokenCount}`)
+//       message.tokens = newTokenCount
+//       changed = true
+//     }
+//   }
+
+//   if (changed) await supabase
+//     .from("sessions")
+//     .upsert({ id, session })
+// }
 
 // deno-lint-ignore ban-types
 interface AsyncSessionStore<T = object> {

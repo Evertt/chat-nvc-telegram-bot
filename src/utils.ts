@@ -168,7 +168,7 @@ export function convertToChatMessages(messages: Message[], allNames: string[], e
 	const chatMessages: MyChatCompletionRequestMessage[] = messages.map(msg => ({
 		role: msg.name === "system" ? "system" : /chatnvc/i.test(msg.name) ? "assistant" : "user",
 		content: `${excludeNames || [BOT_NAME, "system"].includes(msg.name) ? '' : msg.name + ": "}${msg.message}`,
-		tokens: (excludeNames || [BOT_NAME, "system"].includes(msg.name) ? 0 : getTokens(msg.name + ": ")) + (msg.tokens ??= getTokens(msg.message)),
+		tokens: (excludeNames || [BOT_NAME, "system"].includes(msg.name) ? 0 : getTokens(msg.name + ": ")) + (msg.tokens ??= getTokens(msg.message)) + 4,
 	}))
 
 	const systemPrompt = getSystemPrompt(
@@ -182,7 +182,7 @@ export function convertToChatMessages(messages: Message[], allNames: string[], e
 	chatMessages.unshift({
 		role: "system",
 		content: systemPrompt,
-		tokens: getTokens(systemPrompt),
+		tokens: getTokens(systemPrompt) + 4,
 	})
 
 	return chatMessages
@@ -190,7 +190,7 @@ export function convertToChatMessages(messages: Message[], allNames: string[], e
 
 export const getTokenCount = (chatMessages: MyChatCompletionRequestMessage[]) => {
 	const tokenCount = chatMessages.reduce(
-		(sum, msg) => sum + (msg.tokens ??= getTokens(msg.content)),
+		(sum, msg) => sum + msg.tokens,
 		0
 	)
 
@@ -232,7 +232,8 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 		`
 	}
 
-	const promptTokenCount = getTokenCount(chatMessages)
+	const estimatedPromptTokenCount = getTokenCount(chatMessages)
+	// log(`estimatedPromptTokenCount: ${estimatedPromptTokenCount}`)
 
 	const chatRequestOpts: CreateChatCompletionRequest = {
 		model: "gpt-3.5-turbo",
@@ -241,7 +242,7 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 			role: msg.role,
 			content: msg.content,
 		})),
-		max_tokens: MAX_TOKENS - promptTokenCount,
+		max_tokens: MAX_TOKENS - estimatedPromptTokenCount - 4 * 4,
 	}
 
 	const chatResponse = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -254,6 +255,8 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 	})
 
 	if (!chatResponse.ok) {
+		log(`messages.length: ${chatMessages.length}`)
+
 		const errorText = await chatResponse.json()
 			.then(({ error }) => error.message as string)
 			.catch(() => chatResponse.text())
@@ -267,7 +270,13 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 	const assistantMessage = completionResponse.choices[0]?.message
 	const finishReason = completionResponse.choices[0]?.finish_reason
 
-	ctx.userSession.tokens.used ||= promptTokenCount
+	const actualPromptTokenCount = completionResponse.usage!.prompt_tokens
+	// log("actual prompt token count:", actualPromptTokenCount)
+	const errorPerMessage = (actualPromptTokenCount - estimatedPromptTokenCount) / chatMessages.length
+	// log("error per message:", errorPerMessage)
+
+	ctx.userSession.tokens.used ||= completionResponse.usage?.prompt_tokens
+		?? estimatedPromptTokenCount
 	ctx.userSession.tokens.used += completionResponse.usage?.total_tokens
 		?? ctx.userSession.tokens.used + getTokens(assistantMessage?.content)
 
