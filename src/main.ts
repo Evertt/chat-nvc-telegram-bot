@@ -122,6 +122,13 @@ bot.command("donate", async ctx => {
 bot.command("email", async ctx => {
 	if (ctx.chat.type !== "private") return
 
+	await ctx.reply(oneLine`
+	  For some reason, the email feature is not working right now.
+		So I turned it off for now. Sorry about that.
+	`)
+
+	return
+
 	const emailEntity = ctx.message.entities?.find(e => e.type === "email")
 
 	if (!emailEntity) return ctx.reply(oneLine`
@@ -139,13 +146,19 @@ bot.command("email", async ctx => {
 		msg => `<strong>${msg.name}:</strong> ${msg.message}`
 	).join("</p>\n<p>") + "</p>"
 
-	await smtpClient.send({
+	const sendConfig = {
 		from: `ChatNVC <${EMAIL_USERNAME}>`,
 		to: `${ctx.from!.first_name} <${email}>`,
 		subject: "ChatNVC - Chat History",
 		content: "auto",
 		html: messages,
-	});
+	}
+
+	console.log("Sending email...", sendConfig)
+
+	await smtpClient.send(sendConfig)
+
+	console.log("Email sent, closing connection...")
 	
 	await smtpClient.close()
 
