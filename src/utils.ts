@@ -114,6 +114,8 @@ const SUMMARY_CHAT_MESSAGE = convertToChatMessages(
 	[SUMMARY_MESSAGE], [], true, "empathy"
 )[1]
 
+log(`SUMMARY_CHAT_MESSAGE: ${JSON.stringify(SUMMARY_CHAT_MESSAGE, null, 2)}`)
+
 export const summarize = async (ctx: MyContext) => {
 	log("Trying to get a summary")
 
@@ -121,7 +123,7 @@ export const summarize = async (ctx: MyContext) => {
 		ctx, SUMMARY_PROMPT, true
 	)
 
-	log("Got a summary:", summaryMessage)
+	log(`Got a summary: ${summaryMessage}`)
 
 	ctx.chatSession.messages.at(-1)!.checkpoint = true
 
@@ -130,24 +132,24 @@ export const summarize = async (ctx: MyContext) => {
 
 export const getMessagesFromLastCheckpoint = async (ctx: MyContext) => {
 	const messages = [ ...ctx.chatSession.messages ]
-	log("first messages.length:", messages.length)
+	log(`first messages.length: ${messages.length}`)
 	let i = findLastIndex(messages, message => !!message.checkpoint)
-	log("first i:", i)
+	log(`first i: ${i}`)
 	let messagesFromLastCheckpoint = messages.slice(Math.max(i, 0))
 
 	const chatIsPrivate = ctx.chat?.type === "private"
 	const allNames = getNamesFromMessages(messages)
 	let chatMessages = convertToChatMessages(messagesFromLastCheckpoint, allNames, chatIsPrivate, chatIsPrivate ? "empathy" : "translation")
 
-	log("messagesFromLastCheckpoint.length:", messagesFromLastCheckpoint.length)
+	log(`messagesFromLastCheckpoint.length: ${messagesFromLastCheckpoint.length}`)
 	const lastMessages = needsNewCheckPoint(
 		messagesFromLastCheckpoint, chatMessages
 	)
-	log("messagesFromLastCheckpoint.length:", messagesFromLastCheckpoint.length)
+	log(`messagesFromLastCheckpoint.length: ${messagesFromLastCheckpoint.length}`)
 
 	if (lastMessages.length) {
 		ctx.chatSession.messages = messagesFromLastCheckpoint
-		log("ctx.chatSession.messages.length:", ctx.chatSession.messages.length)
+		log(`ctx.chatSession.messages.length: ${ctx.chatSession.messages.length}`)
 		await summarize(ctx)
 		ctx.chatSession.messages.push(...lastMessages)
 		ctx.chatSession.messages = [
@@ -155,8 +157,9 @@ export const getMessagesFromLastCheckpoint = async (ctx: MyContext) => {
 			...ctx.chatSession.messages
 		]
 		i = findLastIndex(ctx.chatSession.messages, message => !!message.checkpoint)
-		log("new i:", i)
+		log(`new i: ${i}`)
 		messagesFromLastCheckpoint = ctx.chatSession.messages.slice(Math.max(i, 0))
+		log(`new messagesFromLastCheckpoint:\n\n${messagesFromLastCheckpoint.map(m => `${m.name}: ${m.message}`).join("\n\n")}`)
 		chatMessages = convertToChatMessages(messagesFromLastCheckpoint, allNames, chatIsPrivate, chatIsPrivate ? "empathy" : "translation")
 	}
 
@@ -210,7 +213,9 @@ export const needsNewCheckPoint = (messages: Message[], chatMessages: MyChatComp
 	const lastMessages: Message[] = []
 
 	while (tokenCount >= MAX_PROMPT_TOKENS && messages.length) {
-		lastMessages.push(messages.pop()!)
+		// I thought this should actually be .push() instead of .unshift()
+		// but apparently .push() retults in lastMessages being in the reversed order.
+		lastMessages.unshift(messages.pop()!)
 		const deletedMessage = chatMessages.pop()
 		tokenCount -= deletedMessage!.tokens
 	}
@@ -218,8 +223,8 @@ export const needsNewCheckPoint = (messages: Message[], chatMessages: MyChatComp
 	if (tokenCount >= MAX_PROMPT_TOKENS)
 		throw new Error("Messages too long to summarize")
 
-	log("messages.length:", messages.length)
-	log("lastMessages.length:", lastMessages.length)
+	log(`messages.length: ${messages.length}`)
+	log(`lastMessages.length: ${lastMessages.length}`)
 
 	return lastMessages
 }
@@ -331,7 +336,7 @@ export const askAssistant = async (ctx: MyContext, question: string, saveInSessi
 
 	const answer = await getAssistantResponse(ctx, saveInSession, 0.2)
 		.then(answer => {
-			log("Assistant answer:", answer)
+			log(`Assistant answer: ${answer}`)
 			return answer
 		})
 		.catch((errorAnswer: string) => {
