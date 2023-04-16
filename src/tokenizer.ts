@@ -24,4 +24,5 @@ export function getTokens(input?: string): number {
 	return tokens.text.length
 }
 
-export const MAX_TOKENS = 3500
+export const MAX_TOKENS = 4096
+export const MAX_PROMPT_TOKENS = 3500

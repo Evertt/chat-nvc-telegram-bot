@@ -9,7 +9,7 @@ import type {
 	ChatCompletionRequestMessage,
 } from "npm:openai@3.2.1"
 import { type MyContext, BOT_NAME } from "./bot.ts"
-import { getTokens, MAX_TOKENS } from "./tokenizer.ts"
+import { getTokens, MAX_PROMPT_TOKENS, MAX_TOKENS } from "./tokenizer.ts"
 // @deno-types="npm:@types/lodash-es@4.17.6"
 import { findLastIndex, memoize } from "npm:lodash-es@4.17.21"
 import { type IntroData, getSystemPrompt } from "./system-prompt.ts"
@@ -205,17 +205,17 @@ export const getTokenCount = (chatMessages: MyChatCompletionRequestMessage[]) =>
 
 export const needsNewCheckPoint = (messages: Message[], chatMessages: MyChatCompletionRequestMessage[]) => {
 	let tokenCount = getTokenCount(chatMessages)
-	if (tokenCount < MAX_TOKENS) return []
+	if (tokenCount < MAX_PROMPT_TOKENS) return []
 	tokenCount += SUMMARY_CHAT_MESSAGE.tokens
 	const lastMessages: Message[] = []
 
-	while (tokenCount >= MAX_TOKENS && messages.length) {
+	while (tokenCount >= MAX_PROMPT_TOKENS && messages.length) {
 		lastMessages.push(messages.pop()!)
 		const deletedMessage = chatMessages.pop()
 		tokenCount -= deletedMessage!.tokens
 	}
 	
-	if (tokenCount >= MAX_TOKENS)
+	if (tokenCount >= MAX_PROMPT_TOKENS)
 		throw new Error("Messages too long to summarize")
 
 	log("messages.length:", messages.length)
@@ -239,6 +239,8 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 		`
 	}
 
+	const promptTokenCount = getTokenCount(chatMessages)
+
 	const chatRequestOpts: CreateChatCompletionRequest = {
 		model: "gpt-3.5-turbo",
 		temperature,
@@ -246,6 +248,7 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 			role: msg.role,
 			content: msg.content,
 		})),
+		max_tokens: MAX_TOKENS - promptTokenCount,
 	}
 
 	const chatResponse = await fetch("https://api.openai.com/v1/chat/completions", {
