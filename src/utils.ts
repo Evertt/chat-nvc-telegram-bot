@@ -168,7 +168,7 @@ export function convertToChatMessages(messages: Message[], allNames: string[], e
 	const chatMessages: MyChatCompletionRequestMessage[] = messages.map(msg => ({
 		role: msg.name === "system" ? "system" : /chatnvc/i.test(msg.name) ? "assistant" : "user",
 		content: `${excludeNames || [BOT_NAME, "system"].includes(msg.name) ? '' : msg.name + ": "}${msg.message}`,
-		tokens: (excludeNames || [BOT_NAME, "system"].includes(msg.name) ? 0 : getTokens(msg.name + ": ")) + ((msg.tokens ??= getTokens(msg.message)) + 4),
+		tokens: (excludeNames || [BOT_NAME, "system"].includes(msg.name) ? 0 : getTokens(msg.name + ": ")) + (msg.tokens ??= getTokens(msg.message)),
 	}))
 
 	const systemPrompt = getSystemPrompt(
@@ -182,7 +182,7 @@ export function convertToChatMessages(messages: Message[], allNames: string[], e
 	chatMessages.unshift({
 		role: "system",
 		content: systemPrompt,
-		tokens: getTokens(systemPrompt) + 4,
+		tokens: getTokens(systemPrompt),
 	})
 
 	return chatMessages
@@ -190,7 +190,7 @@ export function convertToChatMessages(messages: Message[], allNames: string[], e
 
 export const getTokenCount = (chatMessages: MyChatCompletionRequestMessage[]) => {
 	const tokenCount = chatMessages.reduce(
-		(tokenCount, msg) => tokenCount + (msg.tokens ??= getTokens(msg.content) + 4),
+		(sum, msg) => sum + (msg.tokens ??= getTokens(msg.content)),
 		0
 	)
 
@@ -254,27 +254,22 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 	})
 
 	if (!chatResponse.ok) {
-		log("OpenAI error (maybe overloaded?):", await chatResponse.text())
-		throw OPENAI_OVERLOADED_MESSAGE
+		const errorText = await chatResponse.json()
+			.then(({ error }) => error.message as string)
+			.catch(() => chatResponse.text())
+		
+		log(`OpenAI error: ${errorText}`)
+
+		throw errorText || OPENAI_OVERLOADED_MESSAGE
 	}
 
 	const completionResponse = await chatResponse.json() as CreateChatCompletionResponse
 	const assistantMessage = completionResponse.choices[0]?.message
 	const finishReason = completionResponse.choices[0]?.finish_reason
 
-	const sumTokens = memoize(() => ctx.chatSession.messages.slice(0, -1).reduce(
-		(sum, msg) => sum + ((msg.tokens ??= getTokens(msg.message)) + 4),
-		chatMessages[0].tokens ??= getTokens(chatMessages[0].content) + 4
-	))
-
-	if (ctx.chatSession.messages.at(-1)!.tokens == null) {
-		const promptTokens = completionResponse.usage?.prompt_tokens ?? sumTokens()
-		ctx.chatSession.messages.at(-1)!.tokens = Math.max((promptTokens - sumTokens()), getTokens(ctx.chatSession.messages.at(-1)!.message))
-	}
-
-	ctx.userSession.tokens.used ||= sumTokens() + ctx.chatSession.messages.at(-1)!.tokens! + 4
+	ctx.userSession.tokens.used ||= promptTokenCount
 	ctx.userSession.tokens.used += completionResponse.usage?.total_tokens
-		?? ctx.userSession.tokens.used + getTokens(assistantMessage?.content) + 4
+		?? ctx.userSession.tokens.used + getTokens(assistantMessage?.content)
 
 	if (finishReason === "content_filter") {
 		ctx.chatSession.messages.pop()
@@ -306,7 +301,7 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 			message: content,
 			date: Date(),
 			tokens: completionResponse.usage?.completion_tokens
-				|| (getTokens(assistantMessage.content) + 4),
+				|| getTokens(assistantMessage.content),
 		})
 	}
 
