@@ -9,9 +9,9 @@ export const ROLE_PLAY_SCENE = "ROLE_PLAY"
 type Session = MyContext["session"]
 type NewSession = Modify<Session, {
   __scenes: Modify<Session["__scenes"], {
-    state: {
-      other: Other
-      role_play_kind: "practice_nvc" | "feel_heard" | "see_example"
+    state?: {
+      other?: Other
+      role_play_kind?: "practice_nvc" | "feel_heard" | "see_example"
     }
   }>
 }>
@@ -148,14 +148,14 @@ rolePlayScene.enter(async ctx => {
   })
 
   bot.telegram.setMyCommands(
-    [{ command: "stop_role_play", description: "End the current role-play." }],
+    [{ command: "stop", description: "End the current role-play." }],
     { scope: { type: "chat", chat_id: ctx.chat!.id } }
   )
 })
 
 rolePlayScene.action("practice_nvc", async ctx => {
   const name = ctx.from!.first_name
-  const other = ctx.scene.state.other
+  const other = ctx.scene.state.other!
 
   ctx.scene.state.role_play_kind = "practice_nvc"
   const theirReferral = referrals[other.type](other.value, "their")
@@ -167,7 +167,7 @@ rolePlayScene.action("practice_nvc", async ctx => {
     but as people normally talk, and also based on what ${name} has told you about ${theirReferral} so far.
     If ${name} has told you that ${theirReferral} can be a little difficult, then also be a little difficult.
     But don't overdo it, if ${name} is doing a good job at listening empathetically then allow yourself to be touched by that.
-    Now tell ${name} that you're ready and that they can start. Also tell ${name} that they can end the role-play at any time by typing /stop_role_play.
+    Now tell ${name} that you're ready and that they can start. Also tell ${name} that they can end the role-play at any time by typing /stop.
   `, true)
 
   await ctx.deleteMessage()
@@ -177,7 +177,7 @@ rolePlayScene.action("practice_nvc", async ctx => {
 
 rolePlayScene.action("feel_heard", async ctx => {
   const name = ctx.from!.first_name
-  const other = ctx.scene.state.other
+  const other = ctx.scene.state.other!
 
   ctx.scene.state.role_play_kind = "feel_heard"
   const theirReferral = referrals[other.type](other.value, "their")
@@ -189,7 +189,7 @@ rolePlayScene.action("feel_heard", async ctx => {
     At that point, you'll move to expression and you'll tell ${name} what feelings and needs drove you to do the thing you (${theirReferral}) did.
     After that it just becomes a two-way conversation, and you'll switch between listening and expressing as needed.
     At all times, you'll be ${theirReferral} with NVC skills.
-    Now tell ${name} that you're ready and that they can start. Also tell ${name} that they can end the role-play at any time by typing /stop_role_play.
+    Now tell ${name} that you're ready and that they can start. Also tell ${name} that they can end the role-play at any time by typing /stop.
   `, true)
 
   await ctx.deleteMessage()
@@ -199,7 +199,7 @@ rolePlayScene.action("feel_heard", async ctx => {
 
 rolePlayScene.action("see_example", async ctx => {
   const name = ctx.from!.first_name
-  const other = ctx.scene.state.other
+  const other = ctx.scene.state.other!
 
   ctx.scene.state.role_play_kind = "see_example"
   const theirReferral = referrals[other.type](other.value, "their")
@@ -213,7 +213,7 @@ rolePlayScene.action("see_example", async ctx => {
     After that I assume that they will start expressing their thoughts and feelings about the situation, although probably not in NVC language.
     And then you just listen to them empathically using your NVC skills. But always remember that you're playing ${name} and they are playing ${theirReferral}.
     You can also switch between listening and expressing as needed, whatever seems the most natural in the moment.
-    When you think the role-play is complete, tell them they can end the role-play by typing /stop_role_play.
+    When you think the role-play is complete, tell them they can end the role-play by typing /stop.
     Oh, and don't write out the whole role-play in one message!
     The role-play has to go one message at a time!
     And finally, don't start your messages with "${name}:".
@@ -224,7 +224,7 @@ rolePlayScene.action("see_example", async ctx => {
   await ctx.replyWithHTML(answer)
 })
 
-rolePlayScene.command("stop_role_play", ctx => ctx.scene.leave())
+rolePlayScene.command("stop", ctx => ctx.scene.leave())
 
 rolePlayScene.leave(async ctx => {
   await bot.telegram.deleteMyCommands(

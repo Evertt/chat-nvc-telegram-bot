@@ -23,7 +23,7 @@ bot.telegram.setMyCommands([
 	{ command: "settings", description: "View and change your settings" },
 	{ command: "role_play", description: "We can do a role play" },
 	{ command: "email", description: "Receive an email of our chat history" },
-	{ command: "feedback", description: "You can give feedback that will be emailed to the developer" },
+	{ command: "feedback", description: "You can give feedback to my developer about me" },
 	// { command: "donate", description: "Donate to me" },
 	// { command: "asklocation", description: "Let me ask for your location" },
 ])

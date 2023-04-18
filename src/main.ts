@@ -12,6 +12,7 @@ import { type Telegraf, Markup } from "npm:telegraf@4.12.3-canary.1"
 
 import { getTranscription } from "./audio-transcriber.ts"
 import {
+	sleep,
 	type Message,
 	getAssistantResponse,
 	requestTranscript,
@@ -21,7 +22,7 @@ import {
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
 import { isBotAskingForDonation } from "./donations.ts"
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { SMTPClient, type SendConfig } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { getTokens } from "./tokenizer.ts"
 
 const {
@@ -51,7 +52,12 @@ const smtpClient = new SMTPClient({
 			password: EMAIL_PASSWORD,
 		},
 	},
+	pool: {
+		size: 5,
+	}
 })
+
+const EMAIL_TIME_OUT_ERROR = "EMAIL_TIME_OUT"
 
 bot.start(async ctx => {
 	console.log("start command")
@@ -119,15 +125,60 @@ bot.command("donate", async ctx => {
 	]))
 })
 
+type EmailHandlerConfig = SendConfig & {
+	ctx: MyContext
+	timeout?: number // ms
+}
+
+const emailHandler = ({ ctx, ...sendConfig }: EmailHandlerConfig) => {
+	console.log("Sending email...", sendConfig)
+
+	const sendPromise = smtpClient.send(sendConfig)
+		.then(() => true)
+
+	const timeoutPromise = sleep(sendConfig.timeout ?? 5_000)
+		.then(() => false)
+
+	return Promise.race([sendPromise, timeoutPromise])
+		.then(async success => {
+			if (!success) throw EMAIL_TIME_OUT_ERROR
+
+			console.log("Email sent, closing connection...")
+		
+			await ctx.reply(oneLine`
+				Okay, I sent you an email with your chat history.
+				Please check your inbox and / or spambox.
+			`)
+		})
+		.catch(async error => {
+			if (error === EMAIL_TIME_OUT_ERROR) {
+				console.log("Sending email timed out, closing connection...")
+
+				await ctx.reply(oneLine`
+					For some reason, sending the email was hanging / freezing.
+					So I canceled it for now.
+					And I've notified my developer, and he will try to fix it as soon as possible.
+				`)
+			} else {
+				console.log("Error sending email:", error)
+
+				await ctx.reply(oneLine`
+					Oh no, something went wrong while sending the email.
+					My developer has been notified, and he will try to fix it as soon as possible.
+				`)
+			}
+		})
+		.finally(async () => {
+			try {
+				await smtpClient.close()
+			} catch {
+				// ignore
+			}
+		})
+}
+
 bot.command("email", async ctx => {
 	if (ctx.chat.type !== "private") return
-
-	await ctx.reply(oneLine`
-	  For some reason, the email feature is not working right now.
-		So I turned it off for now. Sorry about that.
-	`)
-
-	return
 
 	const emailEntity = ctx.message.entities?.find(e => e.type === "email")
 
@@ -146,68 +197,14 @@ bot.command("email", async ctx => {
 		msg => `<strong>${msg.name}:</strong> ${msg.message}`
 	).join("</p>\n<p>") + "</p>"
 
-	const sendConfig = {
+	await emailHandler({
+		ctx,
 		from: `ChatNVC <${EMAIL_USERNAME}>`,
 		to: `${ctx.from!.first_name} <${email}>`,
 		subject: "ChatNVC - Chat History",
 		content: "auto",
 		html: messages,
-	}
-
-	console.log("Sending email...", sendConfig)
-
-	await smtpClient.send(sendConfig)
-
-	console.log("Email sent, closing connection...")
-	
-	await smtpClient.close()
-
-	await ctx.reply(oneLine`
-		Okay, I sent you an email with your chat history.
-		Please check your inbox and / or spambox.
-	`)
-})
-
-bot.command("feedback", async ctx => {
-	if (ctx.chat.type !== "private") return
-
-	const feedback = ctx.message.text.slice(9).trim()
-
-	if (!feedback) {
-		return ctx.reply(oneLine`
-			Please write your feedback after the /feedback command.
-			So for example: /feedback I would really like if the bot could do [something].
-		`)
-	}
-
-	const msg = await ctx.reply(oneLine`
-		Thank you for the feedback, I will email it to my developer.
-	`)
-
-	const name = ctx.from.first_name
-
-	const feedbackHTML = stripIndents`
-		<h1>Feedback from ${name} about ChatNVC</h1>
-		<p>${feedback}</p>
-	`
-
-	await smtpClient.send({
-		from: `${name} from Telegram <noreply@devign.nl>`,
-		to: `Evert van Brussel <ecvanbrussel@gmail.com>`,
-		subject: "ChatNVC - Feedback",
-		content: "auto",
-		html: feedbackHTML,
-	});
-	
-	await smtpClient.close()
-
-	await ctx.telegram.deleteMessage(ctx.chat.id, msg.message_id)
-
-	await ctx.reply(
-		oneLine`
-			The feedback email has been sent. :-)
-		`
-	)
+	})
 })
 
 const getReply = (ctx: MyContext) => {
