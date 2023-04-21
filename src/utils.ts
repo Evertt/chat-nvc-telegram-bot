@@ -242,7 +242,7 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 			role: msg.role,
 			content: msg.content,
 		})),
-		max_tokens: MAX_TOKENS - estimatedPromptTokenCount - 4 * 5,
+		max_tokens: MAX_TOKENS - estimatedPromptTokenCount - 4 * 6,
 	}
 
 	const chatResponse = await fetch("https://api.openai.com/v1/chat/completions", {
