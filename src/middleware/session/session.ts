@@ -25,33 +25,6 @@ export const supabase = createClient(
   SUPABASE_KEY,
 )
 
-// const { data: row, error } = await supabase
-//   .from("piggy_banks")
-//   .select()
-//   .is("given_to", null)
-//   .order("credits", { ascending: true })
-//   .order("created_at", { ascending: true })
-//   .limit(1)
-//   .maybeSingle()
-
-// if (error) {
-//   console.log("error:", error)
-// }
-
-// if (!row) {
-//   console.log("no piggy bank found")
-// } else {
-//   const piggyBank = row as {
-//     id: number,
-//     credits: number,
-//     contributed_by: string[],
-//     given_to: number | null,
-//   }
-
-//   console.log("piggy bank:", piggyBank)
-//   console.log("typeof piggyBank.id", typeof piggyBank.id)
-// }
-
 // deno-lint-ignore ban-types
 interface AsyncSessionStore<T = object> {
   get: (key: string) => Promise<T | undefined>;
@@ -75,16 +48,25 @@ export const supabaseStore: AsyncSessionStore<any> = {
     const session = data?.session
 
     if (Array.isArray(session)) {
-      return devalue.unflatten(session)
+      let a = devalue.unflatten(session)
+
+      while (Object.keys(a)[0] === "0") {
+        a = devalue.unflatten(Object.values(a))
+      }
+
+      return a
     }
 
     return session
   },
 
   async set(id, session) {
+    // console.log("session before:", session)
     // session = { ...session }
+    // console.log("session middle:", session)
     // session = devalue.stringify(session)
     // session = JSON.parse(session)
+    // console.log("session after:", session)
 
     const { error } = await supabase
       .from("sessions")
