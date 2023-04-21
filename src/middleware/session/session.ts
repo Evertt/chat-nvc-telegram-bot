@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.20.0"
 import { type Context, session, type MiddlewareFn } from "npm:telegraf@4.12.3-canary.1"
 import { latestSessions } from "./versions/all.ts"
 export { sessionVersions, type SceneSessionData } from "./versions/all.ts"
-// import { getTokens } from "../../tokenizer.ts"
+import * as devalue from "npm:devalue@4.3.0"
 
 const {
   SUPABASE_URL,
@@ -20,33 +20,36 @@ type AllMySessions = {
 
 export type ContextWithMultiSession = Context & AllMySessions
 
-const supabase = createClient(
+export const supabase = createClient(
   SUPABASE_URL,
   SUPABASE_KEY,
 )
 
-// const { data } = await supabase
-//   .from("sessions")
+// const { data: row, error } = await supabase
+//   .from("piggy_banks")
 //   .select()
-//   .like("id", `chat:%`)
-//   .not("id", "like", "%;user:%")
+//   .is("given_to", null)
+//   .order("credits", { ascending: true })
+//   .order("created_at", { ascending: true })
+//   .limit(1)
+//   .maybeSingle()
 
-// for (const row of data!) {
-//   const { id, session } = row as { id: string, session: AllMySessions["chatSession"] }
-//   let changed = false
+// if (error) {
+//   console.log("error:", error)
+// }
 
-//   for (const message of session.messages) {
-//     const newTokenCount = getTokens(message.message)
-//     if (newTokenCount !== message.tokens) {
-//       console.log(`Updating tokens for message from ${message.tokens} to ${newTokenCount}`)
-//       message.tokens = newTokenCount
-//       changed = true
-//     }
+// if (!row) {
+//   console.log("no piggy bank found")
+// } else {
+//   const piggyBank = row as {
+//     id: number,
+//     credits: number,
+//     contributed_by: string[],
+//     given_to: number | null,
 //   }
 
-//   if (changed) await supabase
-//     .from("sessions")
-//     .upsert({ id, session })
+//   console.log("piggy bank:", piggyBank)
+//   console.log("typeof piggyBank.id", typeof piggyBank.id)
 // }
 
 // deno-lint-ignore ban-types
@@ -69,10 +72,20 @@ export const supabaseStore: AsyncSessionStore<any> = {
       throw error
     }
 
-    return data?.session
+    const session = data?.session
+
+    if (Array.isArray(session)) {
+      return devalue.unflatten(session)
+    }
+
+    return session
   },
 
   async set(id, session) {
+    // session = { ...session }
+    // session = devalue.stringify(session)
+    // session = JSON.parse(session)
+
     const { error } = await supabase
       .from("sessions")
       .upsert({ id, session })
