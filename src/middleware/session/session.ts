@@ -34,6 +34,9 @@ interface AsyncSessionStore<T = object> {
 
 export const supabaseStore: AsyncSessionStore<any> = {
   async get(id) {
+    if (!id.startsWith(SUPABASE_PREFIX))
+      id = SUPABASE_PREFIX + id
+
     const { data, error } = await supabase
       .from("sessions")
       .select("session")
@@ -61,6 +64,8 @@ export const supabaseStore: AsyncSessionStore<any> = {
   },
 
   async set(id, session) {
+    if (!id.startsWith(SUPABASE_PREFIX))
+      id = SUPABASE_PREFIX + id
     // console.log("session before:", session)
     // session = { ...session }
     // console.log("session middle:", session)
@@ -78,11 +83,14 @@ export const supabaseStore: AsyncSessionStore<any> = {
     }
   },
 
-  async delete(key) {
+  async delete(id) {
+    if (!id.startsWith(SUPABASE_PREFIX))
+      id = SUPABASE_PREFIX + id
+
     const { error } = await supabase
       .from("sessions")
       .delete()
-      .eq("id", key)
+      .eq("id", id)
 
     if (error) {
       console.error(error)
@@ -95,13 +103,13 @@ const sessionKeyFactories: {
   [K in keyof LatestSessions]: (ctx: ContextWithMultiSession) => Promise<string | undefined>
 } = {
   chatSession: ctx => Promise.resolve(
-    ctx.chat ? `${SUPABASE_PREFIX}chat:${ctx.chat.id}` : undefined
+    ctx.chat ? `chat:${ctx.chat.id}` : undefined
   ),
   userSession: ctx => Promise.resolve(
-    ctx.from ? `${SUPABASE_PREFIX}user:${ctx.from.id}` : undefined
+    ctx.from ? `user:${ctx.from.id}` : undefined
   ),
   session: ctx => Promise.resolve(
-    ctx.chat && ctx.from ? `${SUPABASE_PREFIX}chat:${ctx.chat.id};user:${ctx.from.id}` : undefined
+    ctx.chat && ctx.from ? `chat:${ctx.chat.id};user:${ctx.from.id}` : undefined
   ),
 }
 
