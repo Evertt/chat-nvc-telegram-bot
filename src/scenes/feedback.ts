@@ -1,9 +1,9 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-import { bot, BOT_NAME, type MyContext } from "../bot.ts"
+import { bot, me, type MyContext } from "../bot.ts"
 import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
-import { type Modify } from "../utils.ts"
+import { type Modify, getUserReference } from "../utils.ts"
 
 const {
 	DEVELOPER_CHAT_ID,
@@ -112,16 +112,14 @@ feedbackScene.leave(async ctx => {
     `, Markup.removeKeyboard())
   }
 
-  const userReference = !user
-    ? "An anonymous user"
-    : user.username
-      ? `@${user.username!}`
-      : `<a href="tg://user?id=${user.id}">${user.first_name}</a>`
+  const { userRef, userId } = getUserReference(user)
 
   const message = stripIndents`
-    ${userReference} sent the following feedback about ${BOT_NAME}:
+    ${userRef} sent the following feedback about ${me.first_name}:
     
     <i>${messages.join("\n\n")}</i>
+
+    ${userId ? `User ID: <code>${userId}</code>` : ""}
   `
 
   await bot.telegram.sendMessage(

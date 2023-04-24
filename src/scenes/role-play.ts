@@ -1,8 +1,7 @@
-import { bot, type MyContext, BOT_NAME } from "../bot.ts"
+import { bot, type MyContext } from "../bot.ts"
 import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { askAssistant, type Modify } from "../utils.ts"
-import { getTokens } from "../tokenizer.ts"
 
 export const ROLE_PLAY_SCENE = "ROLE_PLAY"
 
@@ -95,13 +94,9 @@ rolePlayScene.enter(async ctx => {
   const yourReferral = referrals[other.type](other.value, "your")
   const myReferral = referrals[other.type](other.value, "my")
 
-  ctx.chatSession.messages.push({
-    name,
-    type: "text",
-    message: "Can we do a role-play?",
-    date: Date(),
-    tokens: getTokens("Can we do a role-play?"),
-  })
+  const user_id = ctx.from!.id
+  const message = "Can we do a role-play?"
+  ctx.chatSession.addMessage({ user_id, message })
 
   const reply = myReferral === "?"
     ? oneLine`
@@ -139,13 +134,7 @@ rolePlayScene.enter(async ctx => {
       [Markup.button.callback("I'd like to see how you'd handle this", "see_example")],
     ]))
 
-  ctx.chatSession.messages.push({
-    type: "text",
-    name: BOT_NAME,
-    message: reply,
-    date: Date(),
-    tokens: getTokens(reply),
-  })
+  ctx.chatSession.addMessage({ message: reply })
 
   bot.telegram.setMyCommands(
     [{ command: "stop", description: "End the current role-play." }],
@@ -267,11 +256,5 @@ rolePlayScene.leave(async ctx => {
 
   await ctx.reply(message)
 
-  ctx.chatSession.messages.push({
-    type: "text",
-    name: BOT_NAME,
-    message,
-    date: Date(),
-    tokens: getTokens(message),
-  })
+  ctx.chatSession.addMessage({ message })
 })

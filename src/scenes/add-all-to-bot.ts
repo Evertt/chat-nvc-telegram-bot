@@ -3,21 +3,20 @@ import { type MyContext } from "../bot.ts"
 import { settingsScene } from "./settings.ts"
 import { rolePlayScene } from "./role-play.ts"
 import { feedbackScene } from "./feedback.ts"
+import { buyCreditsScene } from "./buy-credits.ts"
+import { welcomeScene } from "./welcome.ts"
 import { oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 
 export const addScenesToBot = (bot: Telegraf<MyContext>) => {
   console.log("Setting up bot scenes...")
 
-  const stage = new Scenes.Stage<MyContext>(
-    [
-      settingsScene,
-      rolePlayScene,
-      feedbackScene,
-    ],
-    {
-      ttl: 3600, // 1 hour
-    }
-  )
+  const stage = new Scenes.Stage<MyContext>([
+    settingsScene,
+    rolePlayScene,
+    feedbackScene,
+    buyCreditsScene,
+    welcomeScene,
+  ])
   
   bot.use(stage.middleware())
 
@@ -33,6 +32,7 @@ export const addScenesToBot = (bot: Telegraf<MyContext>) => {
   })
 
   bot.command("feedback", ctx => ctx.scene.enter(feedbackScene.id))
+  bot.command("buy_credits", ctx => ctx.scene.enter(buyCreditsScene.id))
 
   bot.command(["stop", "done"], async ctx => {
     await bot.telegram.deleteMyCommands(

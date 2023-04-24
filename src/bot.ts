@@ -4,8 +4,6 @@ import { type SceneSessionData, ContextWithMultiSession } from "./middleware/ses
 
 const { TELEGRAM_KEY } = Deno.env.toObject()
 
-export const BOT_NAME = "ChatNVC"
-
 export const setupStart = performance.now()
 export type MyContext = ContextWithMultiSession & {
 	// declare scene type
@@ -24,6 +22,8 @@ bot.telegram.setMyCommands([
 	{ command: "role_play", description: "We can do a role play" },
 	{ command: "email", description: "Receive an email of our chat history" },
 	{ command: "feedback", description: "You can give feedback to my developer about me" },
-	// { command: "donate", description: "Donate to me" },
-	// { command: "asklocation", description: "Let me ask for your location" },
+	{ command: "buy_credits", description: "Buy more credits for yourself and / or others" },
+	{ command: "check_credits", description: "Check how many credits you have left" },
 ])
+
+export const me = await bot.telegram.getMe()
