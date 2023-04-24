@@ -1,8 +1,10 @@
-import type { MyContext } from "../bot.ts"
+import type { MyContext } from "../context.ts"
 import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { stripIndents, oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import type { Modify, Union2Tuple } from "../utils.ts"
 import type { ConditionalKeys, Simplify } from "npm:type-fest@3.6.1"
+// import { supportedCurrencies } from "./buy-credits.ts"
+import { SETTINGS_SCENE_ID } from "../constants.ts"
 
 type Settings = MyContext["userSession"]["settings"]
 
@@ -31,13 +33,13 @@ type SettingsMenu = {
   [key in SettingsKeys]: {
     subject: string
     verb: string
-    options: Exclude<Settings[key], undefined> extends boolean
-      ? "boolean" : Union2Tuple<Exclude<Settings[key], undefined>>
+    options: NonNullable<Settings[key]> extends boolean
+      ? "boolean" : Union2Tuple<NonNullable<Settings[key]>>
     required: undefined extends Settings[key] ? false : true
   }
 }
 
-const settingsMenu: SettingsMenu = {
+const settingsMenu: Partial<SettingsMenu> = {
   receiveVoiceTranscriptions: {
     subject: "voice message transcriptions",
     verb: "receive",
@@ -61,11 +63,16 @@ const settingsMenu: SettingsMenu = {
     verb: "be able to use",
     options: ["Whisper", "Conformer-1"],
     required: false,
-  }
+  },
+  // currency: {
+  //   subject: "currency",
+  //   verb: "use",
+  //   options: supportedCurrencies,
+  //   required: false,
+  // },
 }
 
-export const SETTINGS_SCENE = "SETTINGS"
-export const settingsScene = new Scenes.BaseScene<NewContext>(SETTINGS_SCENE)
+export const settingsScene = new Scenes.BaseScene<NewContext>(SETTINGS_SCENE_ID)
 
 type EnumKeys = Simplify<ConditionalKeys<Settings, string | undefined>>
 type EnumValues = Exclude<Pick<Settings, EnumKeys>[EnumKeys], undefined> | "undefined"
@@ -157,7 +164,7 @@ settingsScene.action(/.+/, ctx => {
 
   if (!settingsMenu[key]) throw new Error(`Unknown setting key: ${key}`)
 
-  const { options, required, verb, subject } = settingsMenu[key]
+  const { options, required, verb, subject } = settingsMenu[key]!
   const value = ctx.userSession.settings[key]
   const { settingsMessageId } = ctx.scene.state
 

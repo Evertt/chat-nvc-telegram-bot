@@ -8,7 +8,8 @@ import type {
 	CreateChatCompletionResponse,
 	ChatCompletionRequestMessage,
 } from "npm:openai@3.2.1"
-import { type MyContext, me } from "./bot.ts"
+import { me } from "./bot.ts"
+import type { MyContext } from "./context.ts"
 import { getTokens, MAX_PROMPT_TOKENS, MAX_TOKENS } from "./tokenizer.ts"
 // @deno-types="npm:@types/lodash-es@4.17.6"
 import { findLastIndex } from "npm:lodash-es@4.17.21"

@@ -1,15 +1,14 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-import { bot, me, type MyContext } from "../bot.ts"
+import type { MyContext } from "../context.ts"
 import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { type Modify, getUserReference } from "../utils.ts"
+import { FEEDBACK_SCENE_ID } from "../constants.ts"
 
 const {
 	DEVELOPER_CHAT_ID,
 } = Deno.env.toObject()
-
-export const FEEDBACK_SCENE = "FEEDBACK"
 
 type SceneState = {
   user?: MyContext["from"]
@@ -28,7 +27,7 @@ export type NewContext = Omit<MyContext, "scene">
   & Modify<MyContext, { session: NewSession }>
   & { scene: Scenes.SceneContextScene<NewContext, SceneSessionData> }
 
-export const feedbackScene = new Scenes.BaseScene<NewContext>(FEEDBACK_SCENE)
+export const feedbackScene = new Scenes.BaseScene<NewContext>(FEEDBACK_SCENE_ID)
 
 feedbackScene.enter(async ctx => {
   await ctx.replyWithHTML(oneLine`
@@ -43,7 +42,7 @@ feedbackScene.enter(async ctx => {
     [Markup.button.callback("I'm open that the developer can reach out to me.", "including_username")],
   ]))
 
-  bot.telegram.setMyCommands(
+  ctx.telegram.setMyCommands(
     [{ command: "done", description: "Send your feedback." }],
     { scope: { type: "chat", chat_id: ctx.chat!.id } }
   )
@@ -94,7 +93,7 @@ feedbackScene.on(message("text"), ctx => {
 })
 
 feedbackScene.leave(async ctx => {
-  await bot.telegram.deleteMyCommands(
+  await ctx.telegram.deleteMyCommands(
     { scope: { type: "chat", chat_id: ctx.chat!.id } }
   )
 
@@ -115,14 +114,14 @@ feedbackScene.leave(async ctx => {
   const { userRef, userId } = getUserReference(user)
 
   const message = stripIndents`
-    ${userRef} sent the following feedback about ${me.first_name}:
+    ${userRef} sent the following feedback about ${ctx.botInfo!.first_name}:
     
     <i>${messages.join("\n\n")}</i>
 
     ${userId ? `User ID: <code>${userId}</code>` : ""}
   `
 
-  await bot.telegram.sendMessage(
+  await ctx.telegram.sendMessage(
     DEVELOPER_CHAT_ID,
     message,
     { parse_mode: "HTML" }

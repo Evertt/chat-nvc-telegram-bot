@@ -1,9 +1,8 @@
-import { bot, type MyContext } from "../bot.ts"
+import type { MyContext } from "../context.ts"
 import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { askAssistant, type Modify } from "../utils.ts"
-
-export const ROLE_PLAY_SCENE = "ROLE_PLAY"
+import { ROLE_PLAY_SCENE_ID } from "../constants.ts"
 
 type Session = MyContext["session"]
 type NewSession = Modify<Session, {
@@ -23,7 +22,7 @@ export type NewContext = Omit<MyContext, "scene"> & Modify<MyContext, {
   scene: Scenes.SceneContextScene<NewContext, SceneSessionData>
 }
 
-export const rolePlayScene = new Scenes.BaseScene<NewContext>(ROLE_PLAY_SCENE)
+export const rolePlayScene = new Scenes.BaseScene<NewContext>(ROLE_PLAY_SCENE_ID)
 
 type ByName = {
   type: "name"
@@ -136,7 +135,7 @@ rolePlayScene.enter(async ctx => {
 
   ctx.chatSession.addMessage({ message: reply })
 
-  bot.telegram.setMyCommands(
+  ctx.telegram.setMyCommands(
     [{ command: "stop", description: "End the current role-play." }],
     { scope: { type: "chat", chat_id: ctx.chat!.id } }
   )
@@ -216,7 +215,7 @@ rolePlayScene.action("see_example", async ctx => {
 rolePlayScene.command("stop", ctx => ctx.scene.leave())
 
 rolePlayScene.leave(async ctx => {
-  await bot.telegram.deleteMyCommands(
+  await ctx.telegram.deleteMyCommands(
     { scope: { type: "chat", chat_id: ctx.chat!.id } }
   )
 

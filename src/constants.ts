@@ -1,0 +1,5 @@
+export const BUY_CREDITS_SCENE_ID = "BUY_CREDITS"
+export const FEEDBACK_SCENE_ID = "FEEDBACK"
+export const ROLE_PLAY_SCENE_ID = "ROLE_PLAY"
+export const SETTINGS_SCENE_ID = "SETTINGS"
+export const WELCOME_SCENE_ID = "WELCOME"

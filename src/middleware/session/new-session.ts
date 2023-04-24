@@ -20,32 +20,6 @@ type SubtractOne<N extends number> = Decrement<NumericTuple<N>> extends infer L
 type WithVersion<Version extends number> =
   { readonly version: Version }
 
-// type WithVersionClass<WV extends WithVersion<number>, UsesCtx extends boolean> =
-//   UsesCtx extends false
-//     ? Class<WV, []>
-//     : Class<WV, [Context]>
-
-// export type NextVersion<WV extends WithVersion<number>> =
-//   WV extends WithVersion<infer V>
-//     ? V extends number
-//       ? Omit<WV, "version"> & WithVersion<AddOne<V>>
-//       : never
-//     : never
-
-// type NextVersionClass<WVC extends WithVersionClass<WithVersion<number>, boolean>,
-// > = WVC extends WithVersionClass<infer WV, infer UsesCtx>
-//     ? WithVersionClass<NextVersion<WV>, UsesCtx>
-//     : never
-
-// export function New<
-//   NS extends NewSession<WithVersion<number>>,
-//   UsesCtx extends boolean,
-//   NSC extends WithVersionClass<NS, UsesCtx> = WithVersionClass<NS, UsesCtx>,
-//   WVC extends WithVersionClass<WithVersion<number>, UsesCtx> = WithVersionClass<WithVersion<number>, UsesCtx>,
-// >(wvc: WVC): NSC {
-//   return wvc as unknown as NSC
-// }
-
 export type NewSession<PrevSession extends WithVersion<number> = WithVersion<0>> =
   PrevSession extends WithVersion<infer V>
     ? V extends 0

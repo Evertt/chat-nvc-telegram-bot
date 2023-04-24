@@ -1,5 +1,5 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-import { bot, me, type MyContext } from "../bot.ts"
+import type { MyContext } from "../context.ts"
 import { supabase } from "../middleware/session/session.ts"
 import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
@@ -7,6 +7,7 @@ import { oneLine, oneLineCommaListsAnd, stripIndents } from "https://deno.land/x
 import { getUserReference, type Modify, getAssistantResponse } from "../utils.ts"
 import { buyCreditsScene } from "./buy-credits.ts"
 import { delay } from "https://deno.land/std@0.184.0/async/delay.ts"
+import { WELCOME_SCENE_ID } from "../constants.ts"
 
 const {
 	DEVELOPER_CHAT_ID,
@@ -20,8 +21,6 @@ interface PiggyBank {
   donors: string[],
   given_to: number | null,
 }
-
-export const WELCOME_SCENE = "WELCOME"
 
 type Session = MyContext["session"]
 type NewSession = Modify<Session, {
@@ -44,7 +43,7 @@ export type NewContext = Omit<MyContext, "scene"> & Modify<MyContext, {
   scene: Scenes.SceneContextScene<NewContext, SceneSessionData>
 }
 
-export const welcomeScene = new Scenes.BaseScene<NewContext>(WELCOME_SCENE)
+export const welcomeScene = new Scenes.BaseScene<NewContext>(WELCOME_SCENE_ID)
 
 const lookForPiggyBank = async (ctx: NewContext) => {
   const { data: row } = await supabase
@@ -142,7 +141,7 @@ welcomeScene.enter(async ctx => {
     ctx.userSession.canConverse
   ) return ctx.scene.leave()
 
-  await bot.telegram.setMyCommands(
+  await ctx.telegram.setMyCommands(
     [{ command: "start", description: "Start again." }],
     { scope: { type: "chat", chat_id: ctx.chat!.id } }
   )
@@ -153,7 +152,7 @@ welcomeScene.enter(async ctx => {
     ctx.scene.state.haveSentVoiceMessage = true
   
     return await ctx.reply(oneLine`
-      Hello there! I'm ${me.first_name}.
+      Hello there! I'm ${ctx.botInfo!.first_name}.
       Please listen to that voice message first.
       And when you're done, press one of the buttons below.
     `, Markup.inlineKeyboard([
@@ -360,7 +359,7 @@ welcomeScene.on([message("text"), message("voice")], async ctx => {
 })
 
 welcomeScene.leave(async ctx => {
-  await bot.telegram.deleteMyCommands(
+  await ctx.telegram.deleteMyCommands(
     { scope: { type: "chat", chat_id: ctx.chat!.id } }
   )
 

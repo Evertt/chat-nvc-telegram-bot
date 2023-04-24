@@ -1,11 +1,19 @@
 import { Telegraf, Scenes } from "npm:telegraf@4.12.3-canary.1"
-import { type MyContext } from "../bot.ts"
+import type {
+  SceneSessionData,
+  ContextWithMultiSession,
+} from "../middleware/session/session.ts"
 import { settingsScene } from "./settings.ts"
 import { rolePlayScene } from "./role-play.ts"
 import { feedbackScene } from "./feedback.ts"
 import { buyCreditsScene } from "./buy-credits.ts"
 import { welcomeScene } from "./welcome.ts"
+import type { MyContext } from "../context.ts"
 import { oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
+
+export type ContextWithScene = ContextWithMultiSession & {
+	scene: Scenes.SceneContextScene<ContextWithScene, SceneSessionData>
+}
 
 export const addScenesToBot = (bot: Telegraf<MyContext>) => {
   console.log("Setting up bot scenes...")

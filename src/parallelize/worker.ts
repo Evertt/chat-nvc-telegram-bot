@@ -1,32 +1,22 @@
 // deno-lint-ignore-file ban-types
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-import "./cycle.js"
-
-// import * as http from "node:http"
-import { bot, me, MyContext, setupStart } from "./bot.ts"
-import { welcomeScene } from "./scenes/welcome.ts"
-import { supabaseStore } from "./middleware/session/session.ts"
-
-import { type Telegraf } from "npm:telegraf@4.12.3-canary.1"
-
-import { getTranscription } from "./audio-transcriber.ts"
+import { TelegrafWorker } from "./telegraf-worker.ts"
+import type { MyContext } from "../context.ts"
+import { SMTPClient, type SendConfig } from "https://deno.land/x/denomailer@1.6.0/mod.ts"
+import { WELCOME_SCENE_ID } from "../constants.ts"
+import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
+import { message } from "npm:telegraf@4.12.3-canary.1/filters"
+import { delay } from "https://deno.land/std@0.184.0/async/delay.ts"
+import { getTranscription } from "../audio-transcriber.ts"
 import {
 	type SubMessage,
 	getAssistantResponse,
 	requestTranscript,
-	fetchTranscript,
-	roundToSeconds,
 	errorMessage,
-} from "./utils.ts"
-import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
-import { message } from "npm:telegraf@4.12.3-canary.1/filters"
-import { SMTPClient, type SendConfig } from "https://deno.land/x/denomailer@1.6.0/mod.ts"
-import { delay } from "https://deno.land/std@0.184.0/async/delay.ts"
+} from "../utils.ts"
 
 const {
-  TELEGRAM_WEBBOOK_TOKEN,
-  DOMAIN = "",
-  PORT,
+  TELEGRAM_KEY,
 	EMAIL_HOST,
 	EMAIL_USERNAME,
 	EMAIL_PASSWORD,
@@ -34,13 +24,21 @@ const {
 	DEVELOPER_CHAT_ID,
 } = Deno.env.toObject()
 
+const bot = new TelegrafWorker<MyContext>(TELEGRAM_KEY, {
+	telegram: { webhookReply: false }
+})
+
+// I'm doing this weird thing here because
+// I hoped that this way I could guarantee
+// a few things about the order of execution
+// Though it doesn't really seem to work
 await (async () => {
-	const { addMiddlewaresToBot } = await import("./middleware/add-all-to-bot.ts")
+	const { addMiddlewaresToBot } = await import("../middleware/add-all-to-bot.ts")
 	addMiddlewaresToBot(bot)
 })()
 
 await (async () => {
-	const { addScenesToBot } = await import("./scenes/add-all-to-bot.ts")
+	const { addScenesToBot } = await import("../scenes/add-all-to-bot.ts")
 	addScenesToBot(bot)
 })()
 
@@ -72,7 +70,7 @@ bot.start(async ctx => {
 	)
 
 	if (!ctx.userSession.haveSpokenBefore || !ctx.userSession.canConverse) {
-		return ctx.scene.enter(welcomeScene.id)
+		return ctx.scene.enter(WELCOME_SCENE_ID)
 	}
 
 	const greeting = oneLine`
@@ -259,13 +257,13 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 	const { text } = ctx.message
 
 	const wasMentioned = "voice" in ctx.message
-		? text.includes(me.first_name) || text.includes(me.username)
+		? text.includes(ctx.botInfo!.first_name) || text.includes(ctx.botInfo!.username)
 		: text.includes(`@${ctx.me}`)
 
 	const reply = ctx.message.reply_to_message
 
 	if (ctx.chatSession.isEmpathyRequestGroup) {
-		if (!wasMentioned && reply?.from?.id !== me.id) return
+		if (!wasMentioned && reply?.from?.id !== ctx.botInfo!.id) return
 
 		return await ctx.reply(oneLine`
 			Hey, I'm happy to offer empathy.
@@ -275,7 +273,7 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 	}
 
 	if (!wasMentioned) {
-		if (reply?.from?.id !== me.id) return
+		if (reply?.from?.id !== ctx.botInfo!.id) return
 	}
 
 	if (text.includes("/keep_track")) {
@@ -456,85 +454,3 @@ bot.on(message("left_chat_member"), async ctx => {
 	ctx.chatSession.groupMemberCount =
 		await bot.telegram.getChatMembersCount(ctx.chat.id)
 })
-
-const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
-  ? {
-      domain: DOMAIN,
-      port: +PORT,
-      hookPath: "/",
-      secretToken: TELEGRAM_WEBBOOK_TOKEN,
-			cb: async (req, res) => {
-				const url = new URL(req.url!, DOMAIN)
-				const updateId = parseInt(url.searchParams.get("update_id")!)
-
-				const pausedUpdate: undefined | [
-					transcriptionStart: number,
-					update: Ctx["update"]
-				] = JSON.retrocycle(await supabaseStore.get(`paused-update:${updateId}`))
-
-				const [transcriptionStart, ctxUpdate] = pausedUpdate ?? []
-
-				if (!ctxUpdate || !transcriptionStart) {
-					console.error("No context found in cache for update", { updateId, ctxUpdate, transcriptionStart })
-					await supabaseStore.delete(`paused-update:${updateId}`)
-					return
-				}
-
-			try {
-					let body = ''
-					// parse each buffer to string and append to body
-					for await (const chunk of req) body += String(chunk)
-					// parse body to object
-					const update = JSON.parse(body) as {
-						status: "completed"
-						transcript_id: string
-					} | {
-						status: "error"
-						error: string
-					}
-
-					if (update.status === "error") {
-						throw ["transcript status error", update.error]
-					}
-
-					const text = await fetchTranscript(update.transcript_id)
-
-					if (!text) {
-						throw ["No text found for transcript status update", updateId]
-					}
-
-					const transcriptionEnd = performance.now()
-					const transcriptionTime = `${roundToSeconds(transcriptionEnd - transcriptionStart)} seconds`
-					// await bot.telegram.sendMessage(ctx.update.message.chat.id, oneLine`
-					// 	All in all, it took ${transcriptionTime} to transcribe your voice message.
-					// 	One thing to note though, is that the service has a start-up time of about 15 to 25 seconds,
-					// 	regardless of the duration of the voice message.
-					// 	But after that, it can transcribe voice messages around 3 to 6 times faster
-					// 	than the duration of the message. So longer voice messages will "feel" faster to transcribe.
-					// 	Maybe it's good to know that the voice message must be longer than 160 ms and shorter than 10 hours.
-					// `)
-					console.log(`Transcribed voice file in ${transcriptionTime}`)
-					ctxUpdate.message.text = text
-
-					await bot.handleUpdate(ctxUpdate)
-				} catch (error) {
-					console.error("error", error)
-					bot.telegram.sendMessage(ctxUpdate.message.chat.id, "There was an error transcribing your voice message.")
-				} finally {
-					await supabaseStore.delete(`paused-update:${updateId}`)
-					res.statusCode = 200
-					res.end()
-				}
-			}
-    }
-  : undefined
-
-console.log("Starting bot...")
-bot.launch({ webhook, dropPendingUpdates: !!webhook })
-	.catch(error => {
-		console.error(error)
-		Deno.exit(1)
-	})
-
-const setupEnd = performance.now()
-console.log(`Setup took ${roundToSeconds(setupEnd - setupStart)} seconds.`)

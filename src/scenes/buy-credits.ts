@@ -1,5 +1,5 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-import { bot, me, type MyContext } from "../bot.ts"
+import type { MyContext } from "../context.ts"
 import { supabase } from "../middleware/session/session.ts"
 import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
@@ -10,13 +10,14 @@ import type { Simplify } from "npm:type-fest@3.6.1"
 import { chunk } from "npm:lodash-es@4.17.21"
 import CurrencyAPI from "npm:@everapi/currencyapi-js@1.0.6"
 import { delay } from "https://deno.land/std@0.184.0/async/delay.ts"
+import { BUY_CREDITS_SCENE_ID } from "../constants.ts"
 
 // These are all the currencies that are supported
 // by both Telegram and Stripe, which also
 // don't have strange exception rules.
-// I've commented out 3, so that the total comes to 60.
+// ~~I've commented out 3, so that the total comes to 60.
 // Which makes it easier to split the currencies into
-// chunks and display them as a keyboard.
+// chunks and display them as a keyboard.~~
 export const supportedCurrencies = [
   "AED",
   "ALL",
@@ -41,14 +42,14 @@ export const supportedCurrencies = [
   "GBP",
   "GEL",
   "HKD",
-  // "IDR",
+  "IDR", // considered to comment out
   "ILS",
   "INR",
   "JMD",
   "KES",
   "KGS",
   "KZT",
-  // "LBP",
+  "LBP", // considered to comment out
   "LKR",
   "MAD",
   "MDL",
@@ -78,7 +79,7 @@ export const supportedCurrencies = [
   "TZS",
   "UAH",
   "USD",
-  // "UZS",
+  "UZS", // considered to comment out
   "YER",
   "ZAR",
 ] as const
@@ -98,8 +99,6 @@ const {
 	STRIPE_TOKEN: PAYMENT_TOKEN = "",
   DEVELOPER_CHAT_ID,
 } = Deno.env.toObject()
-
-export const BUY_CREDITS_SCENE = "BUY_CREDITS"
 
 const currencyKeyboard = Markup.keyboard(
   chunk(supportedCurrencies, 6)
@@ -143,10 +142,10 @@ export type NewContext = Omit<MyContext, "scene"> & Modify<MyContext, {
   scene: Scenes.SceneContextScene<NewContext, SceneSessionData>
 }
 
-export const buyCreditsScene = new Scenes.BaseScene<NewContext>(BUY_CREDITS_SCENE)
+export const buyCreditsScene = new Scenes.BaseScene<NewContext>(BUY_CREDITS_SCENE_ID)
 
 buyCreditsScene.enter(async ctx => {
-  await bot.telegram.setMyCommands(
+  await ctx.telegram.setMyCommands(
     [{ command: "stop", description: "Stop buying credits." }],
     { scope: { type: "chat", chat_id: ctx.chat!.id } }
   )
@@ -534,7 +533,7 @@ buyCreditsScene.action("continue", async ctx => {
 
   await ctx.sendInvoice({
 		currency,
-		title: `Credits for @${me.username}`,
+		title: `Credits for @${ctx.botInfo!.username}`,
 		description: `Thank you for your ${kind.toLowerCase()}!`,
 		payload: JSON.stringify(invoicePayload),
 		provider_token: PAYMENT_TOKEN,
@@ -653,29 +652,6 @@ const createPurchaseInDb = async (ctx: MyContext, purchase: Purchase) => {
   return await ctx.scene.leave()
 }
 
-bot.on("pre_checkout_query", async ctx => {
-  const { self, others, er } = JSON.parse(ctx.preCheckoutQuery.invoice_payload) as InvoicePayload
-  const total = ctx.preCheckoutQuery.total_amount
-
-  const cSelf = Math.round(self * er * 100)
-  const cOthers = Math.round(others * er * 100)
-
-  console.log("pre_checkout_query", { cSelf, cOthers, er, total })
-
-  if (cSelf + cOthers <= total)
-    return await ctx.answerPreCheckoutQuery(true)
-  
-  await ctx.answerPreCheckoutQuery(false, stripIndents`
-    I don't know why, but the numbers don't add up.
-
-    You want to pay $${(self + others)}.
-    ${others > 0 ? `(That's $${self} for yourself and $${others} for others.)` : ""}
-    But the total amount on the invoice is $${total}.
-
-    Again, I don't know what happened, but this invoice is invalid.
-  `)
-})
-
 // I'd prefer to do bot.on instead of buyCreditsScene.on,
 // because I want to be able to handle this event even if the user
 // for whatever reason is not in the buyCreditsScene.
@@ -739,7 +715,7 @@ buyCreditsScene.command("stop", ctx => {
 })
 
 buyCreditsScene.leave(async ctx => {
-  await bot.telegram.deleteMyCommands(
+  await ctx.telegram.deleteMyCommands(
     { scope: { type: "chat", chat_id: ctx.chat!.id } }
   )
 

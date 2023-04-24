@@ -1,8 +1,9 @@
 import { getTokens } from "../../../tokenizer.ts"
 import type { NewSession } from "../new-session.ts"
-import { Scenes, type Context } from "npm:telegraf@4.12.3-canary.1"
+import { Scenes, type Context, type Telegraf } from "npm:telegraf@4.12.3-canary.1"
 import { type Modify, SYSTEM_USER_ID, SYSTEM_NAME } from "../../../utils.ts"
-import { me } from "../../../bot.ts"
+
+type UserFromGetMe = NonNullable<Telegraf["botInfo"]>
 
 export type Message = {
 	type: "text" | "voice"
@@ -35,6 +36,7 @@ export class ChatSession implements NewSession {
   type: "private" | "group"
 	groupMembers = new Map<number, User>()
 	groupMemberCount = 0
+	me: UserFromGetMe
 
 	get missingGroupMemberCount() {
 		return this.groupMemberCount - this.groupMembers.size
@@ -48,6 +50,7 @@ export class ChatSession implements NewSession {
 	}
 
 	constructor(ctx: Context) {
+		this.me = ctx.botInfo!
 		const isPrivate = ctx.chat?.type === "private"
 		this.storeMessages = isPrivate
 		this.language_code = isPrivate ? ctx.from?.language_code ?? "en" : "en"
@@ -71,7 +74,7 @@ export class ChatSession implements NewSession {
 	addMessage(message: SubMessage) {
 		this.messages.push({
 			...message,
-			user_id: message.user_id ?? me.id,
+			user_id: message.user_id ?? this.me.id,
 			type: message.type ?? "text",
 			tokens: message.tokens ?? getTokens(message.message),
 			date: message.date ?? Date(),
@@ -80,7 +83,7 @@ export class ChatSession implements NewSession {
 
 	getName(user_id: number) {
 		if (user_id === SYSTEM_USER_ID) return SYSTEM_NAME
-		if (user_id === me.id) return me.first_name
+		if (user_id === this.me.id) return this.me.first_name
 		const user = this.groupMembers.get(user_id)
 		return user?.first_name ?? `User ${user_id}`
 	}
