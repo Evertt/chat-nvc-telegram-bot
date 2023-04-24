@@ -1,7 +1,7 @@
 // deno-lint-ignore-file ban-types
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 import { TelegrafWorker } from "./telegraf-worker.ts"
-import type { MyContext } from "../context.ts"
+import type { MyContext, SubMessage } from "../context.ts"
 import { SMTPClient, type SendConfig } from "https://deno.land/x/denomailer@1.6.0/mod.ts"
 import { WELCOME_SCENE_ID } from "../constants.ts"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
@@ -9,11 +9,13 @@ import { message } from "npm:telegraf@4.12.3-canary.1/filters"
 import { delay } from "https://deno.land/std@0.184.0/async/delay.ts"
 import { getTranscription } from "../audio-transcriber.ts"
 import {
-	type SubMessage,
 	getAssistantResponse,
 	requestTranscript,
 	errorMessage,
 } from "../utils.ts"
+import { debug } from "https://deno.land/x/debug@0.2.0/mod.ts"
+
+const log = debug("telegraf:worker-instance")
 
 const {
   TELEGRAM_KEY,
@@ -344,7 +346,7 @@ const handler = async (ctx: Ctx) => {
 		return await handleGroupChat(ctx, lastMessage)
 
 	if (!ctx.userSession.canConverse) {
-		return ctx.scene.enter(welcomeScene.id)
+		return ctx.scene.enter(WELCOME_SCENE_ID)
 	}
 
 	return await ctx.persistentChatAction(
@@ -358,6 +360,8 @@ const handler = async (ctx: Ctx) => {
 
 bot.on("text", handler)
 bot.on(message("voice"), async ctx => {
+	const { supabaseStore } = await import("../middleware/session/session.ts")
+
 	if (ctx.chat.type !== "private") return
 	if (!ctx.chatSession.storeMessages) return
 
@@ -394,7 +398,7 @@ bot.on(message("voice"), async ctx => {
 	}
 
 	if (!ctx.userSession.canConverse)
-		return await ctx.scene.enter(welcomeScene.id)
+		return await ctx.scene.enter(WELCOME_SCENE_ID)
 
 	await ctx.reply(oneLine`
 		Thanks for sharing, I'm listening.
@@ -454,3 +458,5 @@ bot.on(message("left_chat_member"), async ctx => {
 	ctx.chatSession.groupMemberCount =
 		await bot.telegram.getChatMembersCount(ctx.chat.id)
 })
+
+log("Bot started")

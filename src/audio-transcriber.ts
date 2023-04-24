@@ -1,6 +1,6 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 import { convertOggOpusToWebm } from "./audio-converter.ts"
-import { roundToSeconds } from "./utils.ts"
+import { roundToSeconds } from "./fns.ts"
 
 const { OPENAI_KEY } = Deno.env.toObject()
 

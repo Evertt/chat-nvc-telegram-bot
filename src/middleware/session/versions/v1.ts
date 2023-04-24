@@ -1,7 +1,8 @@
 import { getTokens } from "../../../tokenizer.ts"
 import type { NewSession } from "../new-session.ts"
 import { Scenes, type Context, type Telegraf } from "npm:telegraf@4.12.3-canary.1"
-import { type Modify, SYSTEM_USER_ID, SYSTEM_NAME } from "../../../utils.ts"
+import { type Modify } from "../../../utils.ts"
+import { SYSTEM_USER_ID, SYSTEM_NAME } from "../../../constants.ts"
 
 type UserFromGetMe = NonNullable<Telegraf["botInfo"]>
 

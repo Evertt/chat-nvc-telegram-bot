@@ -8,7 +8,7 @@ import type {
 	CreateChatCompletionResponse,
 	ChatCompletionRequestMessage,
 } from "npm:openai@3.2.1"
-import { me } from "./bot.ts"
+import { me } from "./me.ts"
 import type { MyContext } from "./context.ts"
 import { getTokens, MAX_PROMPT_TOKENS, MAX_TOKENS } from "./tokenizer.ts"
 // @deno-types="npm:@types/lodash-es@4.17.6"
@@ -18,13 +18,14 @@ import { oneLine, oneLineCommaListsAnd } from "https://deno.land/x/deno_tags@1.8
 import { OPENAI_OVERLOADED_MESSAGE } from "./error-messages.ts"
 import { debug } from "https://deno.land/x/debug@0.2.0/mod.ts"
 import type { ParseMode } from "npm:typegram@4.3.0"
+import { SUMMARY_PROMPT, SYSTEM_USER_ID, SYSTEM_NAME, SUMMARY_MESSAGE } from "./constants.ts"
+import type { ChatSession, Message } from "./context.ts"
+
+const SUMMARY_CHAT_MESSAGE = convertToChatMessages(
+	[SUMMARY_MESSAGE], true, "empathy"
+)[1]
 
 const log = debug("telegraf:utils")
-
-export type ChatSession = MyContext["chatSession"]
-export type Message = ChatSession["messages"][number]
-export type SubMessage = Parameters<ChatSession["addMessage"]>[0]
-export type GroupMembers = ChatSession["groupMembers"]
 
 const { OPENAI_KEY, ASSEMBLYAI_KEY, DOMAIN } = Deno.env.toObject()
 
@@ -74,18 +75,6 @@ export type FixedLengthArray<T, L extends number, TObj = [T, ...Array<T>]> =
     [Symbol.iterator]: () => IterableIterator<T>   
   }
 
-export const SYSTEM_USER_ID = 0
-export const SYSTEM_NAME = "System"
-
-const rolesMap = new Map([
-	[SYSTEM_USER_ID, "system"],
-	[me.id, "assistant"]
-])
-
-const namesMap = new Map([
-	[SYSTEM_USER_ID, SYSTEM_NAME],
-	[me.id, me.first_name]
-])
 
 export const errorMessage = (error: any) => {
 	let message = ''
@@ -151,26 +140,6 @@ export const moderate = async (input: string) => {
 	return false
 }
 
-const SUMMARY_PROMPT = oneLine`
-	Please summarize the observations, feelings, needs,
-	and possibly requests that the other person
-	(or people, if there were more than one) had in the conversation.
-	If there were any valuable insights in the conversation,
-	you can include those too in the summary.
-`
-
-const SUMMARY_MESSAGE: Message = {
-	user_id: SYSTEM_USER_ID,
-	message: SUMMARY_PROMPT,
-	type: "text",
-	date: Date(),
-	tokens: getTokens(SUMMARY_PROMPT),
-}
-
-const SUMMARY_CHAT_MESSAGE = convertToChatMessages(
-	[SUMMARY_MESSAGE], true, "empathy"
-)[1]
-
 export const summarize = async (ctx: MyContext) => {
 	const summaryMessage = await askAssistant(
 		ctx, SUMMARY_PROMPT, true
@@ -220,6 +189,16 @@ export const getMessagesFromLastCheckpoint = async (ctx: MyContext): Promise<Mes
 
 export function convertToChatMessages(messages: Message[], excludeNames: boolean, request: IntroData["request"] = "translation", chatSession?: ChatSession) {
 	const allNames = new Set(chatSession?.allMemberNames ?? [])
+
+	const namesMap = new Map([
+		[SYSTEM_USER_ID, SYSTEM_NAME],
+		[me.id, me.first_name]
+	])
+
+	const rolesMap = new Map([
+		[SYSTEM_USER_ID, "system"],
+		[me.id, "assistant"]
+	])
 
 	const chatMessages: MyChatCompletionRequestMessage[] = messages.map(msg => {
 		const { user_id: id } = msg
@@ -467,5 +446,3 @@ export const fetchTranscript = async (transcriptId: string) => {
 
 	return text
 }
-
-export const roundToSeconds = (time: number) => Math.round(time / 10) / 100

@@ -1,0 +1,1 @@
+export const roundToSeconds = (time: number) => Math.round(time / 10) / 100

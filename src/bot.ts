@@ -1,12 +1,15 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
+import { me } from "./me.ts"
 import { Telegraf } from "npm:telegraf@4.12.3-canary.1"
 import type { MyContext } from "./context.ts"
-import { sequentialize, distribute, createConcurrentSink, type UpdateConsumer } from "https://deno.land/x/grammy_runner@v2.0.3/mod.ts"
-import { roundToSeconds } from "./utils.ts"
+import { createThread, type Thread } from "https://deno.land/x/grammy_runner@v2.0.3/platform.deno.ts"
 import { assemblAIWebhook } from "./assemblyai-webhook.ts"
 import { stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import type { InvoicePayload } from "./scenes/buy-credits.ts"
-import express from "https://esm.sh/express@4.18.2"
+import { roundToSeconds } from "./fns.ts"
+import { debug } from "https://deno.land/x/debug@0.2.0/mod.ts"
+
+const log = debug("telegraf:main-bot")
 
 const {
 	TELEGRAM_KEY,
@@ -35,7 +38,6 @@ bot.telegram.setMyCommands([
 	{ command: "check_credits", description: "Check how many credits you have left" },
 ])
 
-export const me = await bot.telegram.getMe()
 bot.botInfo = me
 
 bot.on("pre_checkout_query", async ctx => {
@@ -61,41 +63,52 @@ bot.on("pre_checkout_query", async ctx => {
   `)
 })
 
-bot.use(sequentialize(ctx => ctx.chat?.id.toString()))
+type ChatId = NonNullable<MyContext["chat"]>["id"]
+const threads = new Map<ChatId, Thread<Update, "stop">>()
 
-const dist = distribute(new URL("./parallelize/worker.ts", import.meta.url))
-bot.use(ctx => dist({ update: ctx.update, me }))
+bot.use((ctx, next) => {
+	const { chat } = ctx
+	if (!chat) return next()
 
-if (DOMAIN) {
-	console.log("Starting bot...")
+	log(`Received update from chat ${chat.id} (${chat.type})`)
 
-	const botWebHook = await bot.createWebhook({
-		domain: DOMAIN,
-		drop_pending_updates: true,
-		secret_token: TELEGRAM_WEBBOOK_TOKEN,
-	})
+	const { id } = chat
 
-	const app = express()
+	if (!threads.has(id)) {
+		log(`Creating new thread for chat ${id}...`)
 
-	app.use(
-		botWebHook,
-		assemblAIWebhook(bot),
-	)
+		const thread = createThread<Update, "stop", typeof me>(
+			new URL("./parallelize/worker.ts", import.meta.url),
+			me
+		)
 
-	const setupEnd = performance.now()
-	console.log(`Setup took ${roundToSeconds(setupEnd - setupStart)} seconds.`)
+		log(`Thread: ${thread}`)
 
-	const consumer: UpdateConsumer<Update> = {
-		consume: (update) => bot.handleUpdate(update),
+		threads.set(id, thread)
+		thread.onMessage(_ => void threads.delete(id))
 	}
 
-	const sink = createConcurrentSink<Update, unknown>(
-		consumer,
-		(error) => Promise.reject(error),
-		{}
-	)
+	const thread = threads.get(id)!
+	log(`Sending update to thread ${id} ${thread}...`)
+	thread.postMessage(ctx.update)
+})
 
-	app.listen(PORT, () => console.log("Listening on port", PORT))
-} else {
-	bot.launch()
-}
+const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
+  ? {
+      domain: DOMAIN,
+      port: +PORT,
+      hookPath: "/",
+      secretToken: TELEGRAM_WEBBOOK_TOKEN,
+      cb: assemblAIWebhook(bot)
+		}
+  : undefined
+
+console.log("Starting bot...")
+bot.launch({ webhook, dropPendingUpdates: !!webhook })
+  .catch(error => {
+    console.error(error)
+    Deno.exit(1)
+  })
+
+const setupEnd = performance.now()
+console.log(`Setup took ${roundToSeconds(setupEnd - setupStart)} seconds.`)

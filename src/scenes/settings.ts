@@ -75,7 +75,7 @@ const settingsMenu: Partial<SettingsMenu> = {
 export const settingsScene = new Scenes.BaseScene<NewContext>(SETTINGS_SCENE_ID)
 
 type EnumKeys = Simplify<ConditionalKeys<Settings, string | undefined>>
-type EnumValues = Exclude<Pick<Settings, EnumKeys>[EnumKeys], undefined> | "undefined"
+type EnumValues = NonNullable<Pick<Settings, EnumKeys>[EnumKeys]> | "undefined"
 
 settingsScene.enter(async ctx => {
   console.log("Entering settings scene...")

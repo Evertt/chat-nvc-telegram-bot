@@ -2,10 +2,11 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 import type { MyContext } from "./context.ts"
 import { Telegraf } from "npm:telegraf@4.12.3-canary.1"
-import { fetchTranscript, roundToSeconds } from "./utils.ts"
+import { fetchTranscript } from "./utils.ts"
+import { roundToSeconds } from "./fns.ts"
 import { supabaseStore } from "./middleware/session/session.ts"
 
-type WebHook = Exclude<Exclude<Telegraf.LaunchOptions["webhook"], undefined>["cb"], undefined>
+type WebHook = NonNullable<NonNullable<Telegraf.LaunchOptions["webhook"]>["cb"]>
 
 declare const bot: Telegraf<MyContext>
 

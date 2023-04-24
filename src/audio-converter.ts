@@ -1,7 +1,7 @@
 import ffmpeg from 'npm:fluent-ffmpeg@2.1.2'
 import { Writable } from "node:stream"
 import { Buffer } from "node:buffer"
-import { roundToSeconds } from "./utils.ts";
+import { roundToSeconds } from "./fns.ts";
 
 export const convertOggOpusToWebm = async (opusAudioData: Buffer | ArrayBuffer) => {
   const buffer = opusAudioData instanceof Buffer
