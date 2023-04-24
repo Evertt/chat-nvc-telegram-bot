@@ -13,9 +13,23 @@ export const migrate = <
   Ctx extends ContextWithMultiSession = ContextWithMultiSession
 >(key: Key, session: Ctx[Key], ctx: Ctx): Ctx[Key] => {
   if (session.constructor.name === "Object") {
-    const version = "version" in session ? session.version as number : 1
+    // TODO: figure out why sometimes session.version === 0
+    // when it should actually be 4, for example...
+    // because this "fix" of setting version to 1
+    // with `|| 1` obviously doesn't really fix it.
+    // The `: 1` however does serve a purpose.
+    // if a session does not contain a version property,
+    // then it is definitely from a time when I didn't use versioning yet.
+    // And therefor it's pretty much guaranteed that it's the first version.
+    const version = "version" in session ? (session.version as number || 1) : 1
     const newSession = sessionVersions[version - 1][key](ctx)
     session = Object.assign(newSession, session)
+
+    // Some sessions have a restore method that needs to be called
+    // because Object.assign may have corrupted their class instance.
+    if ("restore" in session && typeof session.restore === "function") {
+      session.restore()
+    }
   }
 
   const versions = sessionVersions.map(v => v[key](ctx))
@@ -24,6 +38,7 @@ export const migrate = <
   )
 
   if (i === -1) {
+    console.error("Session version not found", session)
     throw new Error('Session version not found')
   }
 

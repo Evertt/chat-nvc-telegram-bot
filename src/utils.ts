@@ -1,6 +1,6 @@
 // deno-lint-ignore-file
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-import type { ConditionalExcept } from "npm:type-fest@3.6.1"
+import type { ConditionalExcept, Simplify } from "npm:type-fest@3.6.1"
 // import type { Context } from "npm:telegraf@4.12.3-canary.1"
 import type {
 	CreateModerationResponse,
@@ -8,25 +8,28 @@ import type {
 	CreateChatCompletionResponse,
 	ChatCompletionRequestMessage,
 } from "npm:openai@3.2.1"
-import { type MyContext, BOT_NAME } from "./bot.ts"
+import { type MyContext, me } from "./bot.ts"
 import { getTokens, MAX_PROMPT_TOKENS, MAX_TOKENS } from "./tokenizer.ts"
 // @deno-types="npm:@types/lodash-es@4.17.6"
-import { findLastIndex, memoize } from "npm:lodash-es@4.17.21"
+import { findLastIndex } from "npm:lodash-es@4.17.21"
 import { type IntroData, getSystemPrompt } from "./system-prompt.ts"
 import { oneLine, oneLineCommaListsAnd } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { OPENAI_OVERLOADED_MESSAGE } from "./error-messages.ts"
 import { debug } from "https://deno.land/x/debug@0.2.0/mod.ts"
+import type { ParseMode } from "npm:typegram@4.3.0"
 
 const log = debug("telegraf:utils")
-export type Message = MyContext["chatSession"]["messages"][number]
+
+export type ChatSession = MyContext["chatSession"]
+export type Message = ChatSession["messages"][number]
+export type SubMessage = Parameters<ChatSession["addMessage"]>[0]
+export type GroupMembers = ChatSession["groupMembers"]
 
 const { OPENAI_KEY, ASSEMBLYAI_KEY, DOMAIN } = Deno.env.toObject()
 
-export type Modify<T, K> = Omit<T, keyof K> & ConditionalExcept<K, never>
-
-export const sleep = (ms: number) => new Promise<void>(
-	resolve => setTimeout(resolve, ms)
-)
+export type Modify<T, K> = Simplify<
+	Omit<T, keyof K> & ConditionalExcept<K, never>
+>
 
 export type MyChatCompletionRequestMessage = ChatCompletionRequestMessage & {
 	tokens: number
@@ -70,6 +73,59 @@ export type FixedLengthArray<T, L extends number, TObj = [T, ...Array<T>]> =
     [Symbol.iterator]: () => IterableIterator<T>   
   }
 
+export const SYSTEM_USER_ID = 0
+export const SYSTEM_NAME = "System"
+
+const rolesMap = new Map([
+	[SYSTEM_USER_ID, "system"],
+	[me.id, "assistant"]
+])
+
+const namesMap = new Map([
+	[SYSTEM_USER_ID, SYSTEM_NAME],
+	[me.id, me.first_name]
+])
+
+export const errorMessage = (error: any) => {
+	let message = ''
+
+	try {
+		message = typeof error === "string"
+			? error
+			: error instanceof Error || "message" in error
+				? error.message as string
+				: "toString" in error
+					? error.toString() as string
+					: JSON.stringify(error) !== "{}"
+						? JSON.stringify(error)
+						: `${error}`
+	} catch {
+		message = `${error}`
+	}
+
+	return message
+}
+
+type UserReference = {
+	userRef: string
+	userId?: number
+	parse_mode: ParseMode | undefined
+}
+
+export const getUserReference = (user: MyContext["from"]): UserReference => !user
+	? { userRef: "An anonymous user", parse_mode: undefined }
+	: user.username
+		? {
+				userRef: `@${user.username}`,
+				parse_mode: undefined,
+				userId: user.id
+			}
+		: {
+				userRef: `<a href="tg://user?id=${user.id}">${user.first_name}</a>`,
+				parse_mode: "HTML",
+				userId: user.id
+			}
+
 export const moderate = async (input: string) => {
 	const moderationRes = await fetch("https://api.openai.com/v1/moderations", {
 		headers: {
@@ -103,7 +159,7 @@ const SUMMARY_PROMPT = oneLine`
 `
 
 const SUMMARY_MESSAGE: Message = {
-	name: "system",
+	user_id: SYSTEM_USER_ID,
 	message: SUMMARY_PROMPT,
 	type: "text",
 	date: Date(),
@@ -111,7 +167,7 @@ const SUMMARY_MESSAGE: Message = {
 }
 
 const SUMMARY_CHAT_MESSAGE = convertToChatMessages(
-	[SUMMARY_MESSAGE], [], true, "empathy"
+	[SUMMARY_MESSAGE], true, "empathy"
 )[1]
 
 export const summarize = async (ctx: MyContext) => {
@@ -135,8 +191,12 @@ export const getMessagesFromLastCheckpoint = async (ctx: MyContext): Promise<Mes
 	let messagesFromLastCheckpoint = messages.slice(Math.max(i, 0))
 
 	const chatIsPrivate = ctx.chat?.type === "private"
-	const allNames = getNamesFromMessages(messages)
-	let chatMessages = convertToChatMessages(messagesFromLastCheckpoint, allNames, chatIsPrivate, chatIsPrivate ? "empathy" : "translation")
+	let chatMessages = convertToChatMessages(
+		messagesFromLastCheckpoint,
+		chatIsPrivate,
+		chatIsPrivate ? "empathy" : "translation",
+		ctx.chatSession,
+	)
 
 	const lastMessages = needsNewCheckPoint(
 		messagesFromLastCheckpoint, chatMessages
@@ -157,24 +217,31 @@ export const getMessagesFromLastCheckpoint = async (ctx: MyContext): Promise<Mes
 	return { messages: messagesFromLastCheckpoint, chatMessages }
 }
 
-export const getNamesFromMessages = (messages: Message[]) => {
-	const names = new Set(messages.map(msg => msg.name))
-	names.delete(BOT_NAME)
-	names.delete("system")
-	return [...names]
-}
+export function convertToChatMessages(messages: Message[], excludeNames: boolean, request: IntroData["request"] = "translation", chatSession?: ChatSession) {
+	const allNames = new Set(chatSession?.allMemberNames ?? [])
 
-export function convertToChatMessages(messages: Message[], allNames: string[], excludeNames: boolean, request: IntroData["request"] = "translation") {
-	const chatMessages: MyChatCompletionRequestMessage[] = messages.map(msg => ({
-		role: msg.name === "system" ? "system" : /chatnvc/i.test(msg.name) ? "assistant" : "user",
-		content: `${excludeNames || [BOT_NAME, "system"].includes(msg.name) ? '' : msg.name + ": "}${msg.message}`,
-		tokens: (excludeNames || [BOT_NAME, "system"].includes(msg.name) ? 0 : getTokens(msg.name + ": ")) + (msg.tokens ??= getTokens(msg.message)) + 4,
-	}))
+	const chatMessages: MyChatCompletionRequestMessage[] = messages.map(msg => {
+		const { user_id: id } = msg
+		const name = chatSession?.getName(id)
+			?? namesMap.get(id)
+			?? `User ${id}`
+
+		if (!rolesMap.has(id) && !/^User \d+$/.test(name))
+			allNames.add(name)
+
+		const role = (rolesMap.get(id) ?? "user") as "system" | "assistant" | "user"
+		const prefix = excludeNames || role !== "user" ? "" : `${name}: `
+		const content = `${prefix}${msg.message}`
+		const tokens = msg.tokens + getTokens(prefix) + 4
+
+		return { role, content, tokens }
+	})
 
 	const systemPrompt = getSystemPrompt(
 		{
 			request,
-			names: allNames,
+			names: [ ...allNames ],
+			missingMemberCount: chatSession?.missingGroupMemberCount,
 		},
 		false,
 	)
@@ -217,11 +284,11 @@ export const needsNewCheckPoint = (messages: Message[], chatMessages: MyChatComp
 	return lastMessages
 }
 
-export async function getAssistantResponse(ctx: MyContext, saveInSession = true, temperature = 0.9) {
+export async function getAssistantResponse(ctx: MyContext, saveInSession = ctx.chatSession?.storeMessages ?? true, temperature = 0.9) {
 	const { chatMessages } = await getMessagesFromLastCheckpoint(ctx)
 
 	const moderationResult = await moderate(chatMessages.at(-1)!.content)
-	ctx.userSession.tokens.used += chatMessages.at(-1)!.tokens
+	ctx.userSession.credits.used += chatMessages.at(-1)!.tokens
 	
 	if (moderationResult) {
 		ctx.chatSession.messages.pop()
@@ -242,6 +309,17 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 			role: msg.role,
 			content: msg.content,
 		})),
+
+		// this 4 * 6 is an arbitrary number,
+		// because I don't know yet how to calculate the
+		// correct / precise number for `estimatedPromptTokenCount`.
+		// Sometimes it's higher than it should be, sometimes lower.
+		// And I don't know why. But whenever it's lower than it should be,
+		// then there's a chance that the API will return an error.
+		// Saying that I'm asking for too many tokens.
+		// So I'm adding a buffer of 4 * 6 tokens,
+		// because that seems to help most of the time.
+		// But it still doesn't guarantee that the API won't return an error.
 		max_tokens: MAX_TOKENS - estimatedPromptTokenCount - 4 * 6,
 	}
 
@@ -260,6 +338,7 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 		const errorText = await chatResponse.json()
 			.then(({ error }) => error.message as string)
 			.catch(() => chatResponse.text())
+			.catch(() => OPENAI_OVERLOADED_MESSAGE)
 		
 		log(`OpenAI error: ${errorText}`)
 
@@ -274,11 +353,18 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 	// log("actual prompt token count:", actualPromptTokenCount)
 	const errorPerMessage = (actualPromptTokenCount - estimatedPromptTokenCount) / chatMessages.length
 	// log("error per message:", errorPerMessage)
+	const { averageTokenErrorPerMessage, requests } = ctx.userSession
 
-	ctx.userSession.tokens.used ||= completionResponse.usage?.prompt_tokens
+	const newAverageTokenErrorPerMessage =
+		(averageTokenErrorPerMessage * requests + errorPerMessage) / (requests + 1)
+
+	ctx.userSession.averageTokenErrorPerMessage = newAverageTokenErrorPerMessage
+	ctx.userSession.requests++
+
+	ctx.userSession.credits.used ||= completionResponse.usage?.prompt_tokens
 		?? estimatedPromptTokenCount
-	ctx.userSession.tokens.used += completionResponse.usage?.total_tokens
-		?? ctx.userSession.tokens.used + getTokens(assistantMessage?.content)
+	ctx.userSession.credits.used += completionResponse.usage?.total_tokens
+		?? ctx.userSession.credits.used + getTokens(assistantMessage?.content)
 
 	if (finishReason === "content_filter") {
 		ctx.chatSession.messages.pop()
@@ -304,13 +390,9 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 
 	if (!saveInSession) ctx.chatSession.messages.pop()
 	else {
-		ctx.chatSession.messages.push({
-			type: "text",
-			name: BOT_NAME,
+		ctx.chatSession.addMessage({
 			message: content,
-			date: Date(),
-			tokens: completionResponse.usage?.completion_tokens
-				|| getTokens(assistantMessage.content),
+			tokens: completionResponse.usage?.completion_tokens,
 		})
 	}
 
@@ -318,12 +400,9 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = true,
 }
 
 export const askAssistant = async (ctx: MyContext, question: string, saveInSession = false) => {
-	ctx.chatSession.messages.push({
-		type: "text",
-		name: "system",
+	ctx.chatSession.addMessage({
+		user_id: 0, // 0 = system
 		message: question,
-		date: Date(),
-		tokens: getTokens(question),
 	})
 
 	log(`Asking assistant: ${question}`)

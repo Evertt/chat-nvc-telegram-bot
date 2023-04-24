@@ -3,44 +3,46 @@ import "https://deno.land/std@0.179.0/dotenv/load.ts"
 import "./cycle.js"
 
 // import * as http from "node:http"
-import { bot, BOT_NAME, MyContext, setupStart } from "./bot.ts"
-import { addMiddlewaresToBot } from "./middleware/add-all-to-bot.ts"
-import { addScenesToBot } from "./scenes/add-all-to-bot.ts"
+import { bot, me, MyContext, setupStart } from "./bot.ts"
+import { welcomeScene } from "./scenes/welcome.ts"
 import { supabaseStore } from "./middleware/session/session.ts"
 
-import { type Telegraf, Markup } from "npm:telegraf@4.12.3-canary.1"
+import { type Telegraf } from "npm:telegraf@4.12.3-canary.1"
 
 import { getTranscription } from "./audio-transcriber.ts"
 import {
-	sleep,
-	type Message,
+	type SubMessage,
 	getAssistantResponse,
 	requestTranscript,
 	fetchTranscript,
 	roundToSeconds,
+	errorMessage,
 } from "./utils.ts"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
-import { isBotAskingForDonation } from "./donations.ts"
-import { SMTPClient, type SendConfig } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
-import { getTokens } from "./tokenizer.ts"
+import { SMTPClient, type SendConfig } from "https://deno.land/x/denomailer@1.6.0/mod.ts"
+import { delay } from "https://deno.land/std@0.184.0/async/delay.ts"
 
 const {
   TELEGRAM_WEBBOOK_TOKEN,
   DOMAIN = "",
   PORT,
-	PAYMENT_TOKEN = "",
 	EMAIL_HOST,
 	EMAIL_USERNAME,
 	EMAIL_PASSWORD,
 	EMAIL_PORT,
+	DEVELOPER_CHAT_ID,
 } = Deno.env.toObject()
 
-addMiddlewaresToBot(bot)
+await (async () => {
+	const { addMiddlewaresToBot } = await import("./middleware/add-all-to-bot.ts")
+	addMiddlewaresToBot(bot)
+})()
 
-addScenesToBot(bot)
-
-const me = await bot.telegram.getMe()
+await (async () => {
+	const { addScenesToBot } = await import("./scenes/add-all-to-bot.ts")
+	addScenesToBot(bot)
+})()
 
 const smtpClient = new SMTPClient({
 	connection: {
@@ -69,31 +71,18 @@ bot.start(async ctx => {
 		{ scope: { type: "chat", chat_id: ctx.chat!.id } }
 	)
 
-	const greeting = ctx.userSession.haveSpokenBefore
-		? `Okay, let's start over. How can I help you this time, ${ctx.from.first_name}?`
-		: stripIndents`
-			Hi ${ctx.from.first_name}, I'm ChatNVC.
-			I would love to listen to whatever is on your mind, according to the principles of NVC.
+	if (!ctx.userSession.haveSpokenBefore || !ctx.userSession.canConverse) {
+		return ctx.scene.enter(welcomeScene.id)
+	}
 
-			I also want to let you know that on the left side of your text input,
-			you can find a menu button, which will show you a list of commands you can give me.
-
-			Finally, I'm still in alpha, which means that I probably still have lots of bugs,
-			and I'm still learning how to be a really good listener.
-
-			Okay, now that that's out of the way, how can I help you today?
-		`
+	const greeting = oneLine`
+		Okay, let's start over. How can I help you
+		this time, ${ctx.from.first_name}?
+	`
 
 	console.log("Resetting session to start with greeting.")
-	ctx.chatSession.messages = [
-		{
-			type: "text",
-			name: BOT_NAME,
-			message: greeting,
-			date: Date(),
-			tokens: getTokens(greeting),
-		}
-	]
+
+	ctx.chatSession.resetMessages({ message: greeting })
 
 	console.log("Sending greeting.")
 	await ctx.reply(greeting, { reply_markup: { remove_keyboard: true } })
@@ -110,19 +99,37 @@ bot.help(ctx => ctx.reply(oneLine`
 	you can do so by typing /donate.
 `))
 
-bot.command("donate", async ctx => {
-	if (ctx.chat.type !== "private") return
+bot.command("check_credits", async ctx => {
+	console.log("check_credits command")
+
+	const { credits } = ctx.userSession
+	const { used, available } = credits
+	const usedDollars = (used / ctx.userSession.creditsPerRetailDollar).toFixed(2)
+	const availableDollars = (available / ctx.userSession.creditsPerRetailDollar).toFixed(2)
+
+	const usedMessage = used > 0
+		? oneLine`
+			You have used ${used} credits so far.
+			Which is about $${usedDollars}.
+		`
+		: "You have not used any credits yet."
+
+	const availableMessage = available > 0
+		? oneLine`
+			You have ${available} credits left.
+			Which is about $${availableDollars}.
+		`
+		: available === 0
+			? "You have no credits left."
+			: oneLine`
+				You are ${-available} credits in the red.
+				Or $${-availableDollars} in the red.
+			`
 
 	await ctx.reply(oneLine`
-		Oh, you want to donate to me? Thank you, I really appreciate that!
-		Choose any of the options below to donate. And really, thank you! 🙏
-	`, Markup.inlineKeyboard([
-		[
-			Markup.button.callback("$1", "donate_1"),
-			Markup.button.callback("$2", "donate_2"),
-			Markup.button.callback("$4", "donate_4"),
-		]
-	]))
+		${usedMessage}
+		${availableMessage}
+	`)
 })
 
 type EmailHandlerConfig = SendConfig & {
@@ -130,14 +137,22 @@ type EmailHandlerConfig = SendConfig & {
 	timeout?: number // ms
 }
 
-const emailHandler = ({ ctx, ...sendConfig }: EmailHandlerConfig) => {
+const emailHandler = async ({ ctx, ...sendConfig }: EmailHandlerConfig) => {
 	console.log("Sending email...", sendConfig)
 
 	const sendPromise = smtpClient.send(sendConfig)
 		.then(() => true)
 
-	const timeoutPromise = sleep(sendConfig.timeout ?? 5_000)
+	const timeoutPromise = delay(sendConfig.timeout ?? 8_000)
 		.then(() => false)
+
+	await ctx.reply(oneLine`
+		I just want to let you know that the email
+		feature has been very unreliable,
+		and I haven't yet figured out why.
+		So I'm going to try to send you the email,
+		but it might not work. I apologize for the inconvenience.
+	`)
 
 	return Promise.race([sendPromise, timeoutPromise])
 		.then(async success => {
@@ -151,6 +166,28 @@ const emailHandler = ({ ctx, ...sendConfig }: EmailHandlerConfig) => {
 			`)
 		})
 		.catch(async error => {
+			await ctx.telegram.sendMessage(DEVELOPER_CHAT_ID, stripIndents`
+				A user tryed to send themself an email, but it failed.
+				Here's the error message:
+				
+				\`\`\`
+				${errorMessage(error)}
+				\`\`\`
+
+				And here are the email addresses that were used:
+				From: ${sendConfig.from}
+				To: ${sendConfig.to}
+			`, { parse_mode: "Markdown" })
+			.catch(async error => {
+				console.log("Error sending error message to developer.", error)
+				await ctx.telegram.sendMessage(DEVELOPER_CHAT_ID, stripIndents`
+					I tried to send you an error message about the email feature, but that failed too.
+					Here's the last error message:
+
+					${errorMessage(error)}
+				`).catch(() => {})
+			})
+
 			if (error === EMAIL_TIME_OUT_ERROR) {
 				console.log("Sending email timed out, closing connection...")
 
@@ -194,7 +231,7 @@ bot.command("email", async ctx => {
 	const email = ctx.message.text.slice(emailEntity.offset, emailEntity.offset + emailEntity.length)
 
 	const messages = "<h1>Your Chat History</h1>\n<p>" + ctx.chatSession.messages.map(
-		msg => `<strong>${msg.name}:</strong> ${msg.message}`
+		msg => `<strong>${ctx.chatSession.getName(msg.user_id)}:</strong> ${msg.message}`
 	).join("</p>\n<p>") + "</p>"
 
 	await emailHandler({
@@ -208,7 +245,7 @@ bot.command("email", async ctx => {
 })
 
 const getReply = (ctx: MyContext) => {
-	return getAssistantResponse(ctx, ctx.chatSession.storeMessages)
+	return getAssistantResponse(ctx)
 	.catch((errorResponse: string) => {
 		console.error("Error assistant response:", errorResponse)
 		return errorResponse
@@ -218,6 +255,76 @@ const getReply = (ctx: MyContext) => {
 // @ts-expect-error trust me
 type Ctx = Parameters<Extract<Parameters<typeof bot.on<"text">>[1], Function>>[0]
 
+const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
+	const { text } = ctx.message
+
+	const wasMentioned = "voice" in ctx.message
+		? text.includes(me.first_name) || text.includes(me.username)
+		: text.includes(`@${ctx.me}`)
+
+	const reply = ctx.message.reply_to_message
+
+	if (ctx.chatSession.isEmpathyRequestGroup) {
+		if (!wasMentioned && reply?.from?.id !== me.id) return
+
+		return await ctx.reply(oneLine`
+			Hey, I'm happy to offer empathy.
+			Anyone can just message me privately
+			and then I'm happy to listen.
+		`, { reply_to_message_id: ctx.message.message_id })
+	}
+
+	if (!wasMentioned) {
+		if (reply?.from?.id !== me.id) return
+	}
+
+	if (text.includes("/keep_track")) {
+		ctx.chatSession.storeMessages = true
+
+		return ctx.reply(oneLine`
+			Okay, I'll keep track of all messages in this group from now on.
+			So that I can hopefully offer better empathy when asked.
+		`)
+	}
+
+	if (!ctx.userSession.canConverse)
+		return await ctx.reply(oneLine`
+			I'm sorry, but you've run out of credits.
+			Please talk to me privately, so that you can buy some credits from me.
+			Or so that I can put you on the waiting list for a piggy bank.
+		`)
+
+	if (!ctx.chatSession.storeMessages && reply) {
+		let text = "text" in reply ? reply.text : ""
+
+		if ("voice" in reply) {
+			const { file_id } = reply.voice
+			const fileLink = await ctx.telegram.getFileLink(file_id)
+			text = await getTranscription(fileLink as URL)
+		}
+
+		ctx.chatSession.resetMessages()
+
+		ctx.chatSession.addMessage({
+			type: "text" in reply ? "text" : "voice",
+			user_id: reply.from!.id,
+			message: text,
+			date: new Date(reply.date).toString(),
+		})
+
+		ctx.chatSession.addMessage(lastMessage)
+	}
+
+	return await ctx.persistentChatAction(
+		"typing",
+		() => getReply(ctx)
+			.then(async reply => {
+				if (!ctx.chatSession.storeMessages) ctx.chatSession.resetMessages()
+				await ctx.reply(reply, { reply_to_message_id: ctx.message.message_id })
+			})
+	)
+}
+
 const handler = async (ctx: Ctx) => {
 	if (ctx.chat.type === "supergroup") return
 
@@ -225,131 +332,129 @@ const handler = async (ctx: Ctx) => {
 
 	const { text } = ctx.message
 
-	const lastMessage: Message = {
+	const lastMessage: SubMessage = {
 		type: "voice" in ctx.message ? "voice" : "text",
-		name: ctx.from.first_name,
+		user_id: ctx.from.id,
 		message: text,
-		date: Date(),
-		tokens: getTokens(text),
 	}
 
 	if (ctx.chatSession.storeMessages) {
-		ctx.chatSession.messages.push(lastMessage)
+		ctx.chatSession.addMessage(lastMessage)
 	}
 
-	if (!chatIsPrivate) {
-		const wasMentioned = "voice" in ctx.message
-			? text.includes(BOT_NAME)
-			: ctx.message.text.includes(`@${ctx.me}`)
+	if (!chatIsPrivate)
+		return await handleGroupChat(ctx, lastMessage)
 
-		const reply = ctx.message.reply_to_message
-
-		if (!wasMentioned) {
-			if (!reply) return // void (console.log("and there was no reply either"))
-			if (reply.from?.id !== me.id) return
-		}
-
-		if (text.includes("/keep_track")) {
-			ctx.chatSession.storeMessages = true
-
-			return ctx.reply(oneLine`
-				Okay, I'll keep track of all messages in this group from now on.
-				So that I can hopefully offer better empathy when asked.
-			`)
-		}
-
-		if (!ctx.chatSession.storeMessages && reply) {
-			let text = "text" in reply ? reply.text : ""
-
-			if ("voice" in reply) {
-				const { file_id } = reply.voice
-				const fileLink = await ctx.telegram.getFileLink(file_id)
-				text = await getTranscription(fileLink as URL)
-			}
-
-			ctx.chatSession.messages = [lastMessage]
-
-			ctx.chatSession.messages.unshift({
-				type: "text" in reply ? "text" : "voice",
-				name: reply.from!.first_name,
-				message: text,
-				date: new Date(reply.date).toString(),
-				tokens: getTokens(text),
-			})
-		}
-
-		return await ctx.persistentChatAction(
-			"typing",
-			() => getReply(ctx)
-				.then(async reply => {
-					if (!ctx.chatSession.storeMessages) ctx.chatSession.messages = []
-					await ctx.reply(reply, { reply_to_message_id: ctx.message.message_id })
-				})
-		)
+	if (!ctx.userSession.canConverse) {
+		return ctx.scene.enter(welcomeScene.id)
 	}
 
 	return await ctx.persistentChatAction(
 		"typing",
 		() => getReply(ctx)
 		.then(async reply => {
-			const askForDonation =
-				PAYMENT_TOKEN
-				&& ctx.chat.type === "private"
-				&& ctx.userSession.settings.askForDonation !== false
-				&& isBotAskingForDonation(reply)
-
-				await ctx.reply(
-					reply,
-					!askForDonation ? {} : Markup.inlineKeyboard([
-						[
-							Markup.button.callback("No, I don't want to donate right now.", "no_donation"),
-							Markup.button.callback("No, and please don't ask me again.", "never_donation"),
-						],
-						[
-							Markup.button.callback("$1", "donate_1"),
-							Markup.button.callback("$2", "donate_2"),
-							Markup.button.callback("$4", "donate_4"),
-						]
-					])
-				)
+			await ctx.reply(reply)
 		})
 	)
 }
 
 bot.on("text", handler)
 bot.on(message("voice"), async ctx => {
+	if (ctx.chat.type !== "private") return
+	if (!ctx.chatSession.storeMessages) return
+
+	const { audioTranscriptionService } = ctx.userSession.settings
+
+	if (audioTranscriptionService == null) {
+		return await ctx.reply(stripIndents`
+			${oneLine`
+				By default, I no longer listen to voice messages.
+				Because it turned out to be relatively quite expensive.
+			`}
+			
+			You can turn it back on in your /settings.
+
+			There are two options available:
+			${oneLine`
+				- A very slow one, called Whisper,
+				that costs approximately the same as
+				40 words of written text per 1 second of the audio.
+			`}
+			${oneLine`
+				- A less slow one, called Conformer-1,
+				that costs approximately the same as
+				100 words of written text per 1 second of the audio.
+			`}
+
+			${oneLine`
+				So as you can see, if you want to communicate with me
+				via voice messages, your credits will run much more quickly.
+				But if you're okay with that, then please go to /settings
+				and choose whichever service you want to enable for voice messages.
+		  `}
+		`)
+	}
+
+	if (!ctx.userSession.canConverse)
+		return await ctx.scene.enter(welcomeScene.id)
+
 	await ctx.reply(oneLine`
 		Thanks for sharing, I'm listening.
 	`)
 
-	const { file_id } = ctx.message.voice
+	const { file_id, duration } = ctx.message.voice
 	const fileLink = await ctx.telegram.getFileLink(file_id)
-	const transcribeStart = performance.now()
-	supabaseStore.set(`paused-update:${ctx.update.update_id}`, JSON.decycle([ transcribeStart, ctx.update ]))
-	await requestTranscript(fileLink as URL, ctx.update.update_id)
-	console.log("Got a voice message, waiting for transcription...")
+	ctx.userSession.credits.used +=
+		duration * ctx.userSession.creditsPerSecond
+
+	if (audioTranscriptionService === "Conformer-1") {
+		const transcribeStart = performance.now()
+		supabaseStore.set(`paused-update:${ctx.update.update_id}`, JSON.stringify([ transcribeStart, ctx.update ]))
+		await requestTranscript(fileLink as URL, ctx.update.update_id)
+		console.log("Got a voice message, waiting for transcription...")
+		return
+	}
+
+	if (audioTranscriptionService === "Whisper") {
+		// This function is so very slow,
+		// because whisper can't process ogg files,
+		// which is what telegram uses for voice messages.
+		// So it first needs to convert the file to another format,
+		// and that is the bottleneck in this case.
+		const text = await getTranscription(fileLink as URL)
+
+		// @ts-expect-error trust me on this one...
+		ctx.message.text = text
+		return await handler(ctx as unknown as Ctx)
+	}
 })
 
-bot.action("no_donation", ctx =>
-	ctx.editMessageText(oneLine`
-		Thank you for taking care of yourself, I sincerely appreciate it.
-		You are always welcome to ask for more empathy whenever you need it.
-		You can always change your mind by typing /donate.
-	`
-))
+bot.on(message("new_chat_members"), async ctx => {
+	if (ctx.chat.type === "supergroup") return
 
-bot.action("never_donation", async ctx => {
-	ctx.userSession.settings.askForDonation = false
-	await ctx.editMessageText(oneLine`
-		Thank you for taking care of yourself, I sincerely appreciate it.
-		You are always welcome to ask for more empathy whenever you need it.
-	`)
+	const { new_chat_members } = ctx.message
+
+	for (const newMember of new_chat_members) {
+		ctx.chatSession.groupMembers.set(newMember.id, {
+			id: newMember.id,
+			username: newMember.username,
+			first_name: newMember.first_name,
+		})
+	}
+
+	ctx.chatSession.groupMemberCount =
+		await bot.telegram.getChatMembersCount(ctx.chat.id)
 })
 
-bot.action(/donate_(\d+)/, async ctx => {
-	const donationAmount = parseInt(ctx.match[1])
-	await ctx.answerCbQuery(`Thank you for your donation of $${donationAmount}!`)
-	await ctx.deleteMessage()
+bot.on(message("left_chat_member"), async ctx => {
+	if (ctx.chat.type === "supergroup") return
+
+	const { left_chat_member } = ctx.message
+
+	ctx.chatSession.groupMembers.delete(left_chat_member.id)
+
+	ctx.chatSession.groupMemberCount =
+		await bot.telegram.getChatMembersCount(ctx.chat.id)
 })
 
 const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
@@ -371,6 +476,7 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 
 				if (!ctxUpdate || !transcriptionStart) {
 					console.error("No context found in cache for update", { updateId, ctxUpdate, transcriptionStart })
+					await supabaseStore.delete(`paused-update:${updateId}`)
 					return
 				}
 

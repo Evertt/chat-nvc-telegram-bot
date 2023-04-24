@@ -9,7 +9,13 @@ import {
 } from "./v1.ts"
 export * from "./v1.ts"
 
-export const MARKUP = 2
+// 150% profit, minus the fees that Stripe
+// charges for every transaction,
+// which are actually quite a lot when
+// your transactions are of small amounts.
+// Also a MARKUP of 1.5 means that we get
+// a round number of credits per dollar.
+export const MARKUP = 1.5
 
 export type TokenStats = {
   used: number
@@ -18,7 +24,6 @@ export type TokenStats = {
 }
 
 export type NewUserSession = Modify<PrevUserSession, {
-  version: never
   cost: never
 
   readonly wholesaleCost: number
@@ -33,7 +38,7 @@ export type NewUserSession = Modify<PrevUserSession, {
 
   requests: number
   language_code: string
-}> & NewSession<PrevUserSession>
+} & NewSession<PrevUserSession>>
 
 export class UserSession implements NewUserSession {
   readonly version: 2 = 2

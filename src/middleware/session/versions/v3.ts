@@ -16,9 +16,8 @@ export type UserSettings = Modify<PrevUserSettings, {
 }>
 
 export type NewUserSession = Modify<PrevUserSession, {
-  version: never
   settings: UserSettings
-}> & NewSession<PrevUserSession>
+} & NewSession<PrevUserSession>>
 
 export class UserSession implements NewUserSession {
   readonly version: 3 = 3
@@ -74,7 +73,6 @@ export class UserSession implements NewUserSession {
     this.language_code = ctx.from?.language_code ?? "en"
   }
 
-  // @ts-expect-error trust me...
   migrate(prevUserSession: PrevUserSession) {
     // @ts-expect-error trust me...
     delete prevUserSession.version

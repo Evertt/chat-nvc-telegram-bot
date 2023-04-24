@@ -13,11 +13,6 @@ export const addMiddlewaresToBot = <C extends ContextWithMultiSession = ContextW
     // telegrafThrottler(),
     ...sessionMiddlewares,
     migrateSessionMiddleware,
-    (ctx, next: ((ctx: C) => void)) => {
-      ctx.userSession.requests++
-      
-      return next(ctx)
-    },
     rememberWeHaveSpokenBeforeMiddleware,
     saveRecentChatsMiddleware,
   )

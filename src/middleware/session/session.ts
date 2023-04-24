@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.20.0"
 import { type Context, session, type MiddlewareFn } from "npm:telegraf@4.12.3-canary.1"
 import { latestSessions } from "./versions/all.ts"
 export { sessionVersions, type SceneSessionData } from "./versions/all.ts"
-import * as devalue from "npm:devalue@4.3.0"
+// import * as devalue from "npm:devalue@4.3.0"
 
 const {
   SUPABASE_URL,
@@ -48,30 +48,12 @@ export const supabaseStore: AsyncSessionStore<any> = {
       throw error
     }
 
-    const session = data?.session
-
-    if (Array.isArray(session)) {
-      let a = devalue.unflatten(session)
-
-      while (Object.keys(a)[0] === "0") {
-        a = devalue.unflatten(Object.values(a))
-      }
-
-      return a
-    }
-
-    return session
+    return data?.session
   },
 
   async set(id, session) {
     if (!id.startsWith(SUPABASE_PREFIX))
       id = SUPABASE_PREFIX + id
-    // console.log("session before:", session)
-    // session = { ...session }
-    // console.log("session middle:", session)
-    // session = devalue.stringify(session)
-    // session = JSON.parse(session)
-    // console.log("session after:", session)
 
     const { error } = await supabase
       .from("sessions")

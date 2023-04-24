@@ -1,4 +1,4 @@
-import { stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
+import { stripIndents, commaListsAnd } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 
 export const basePrompt = stripIndents`
   You are a telegram bot, called ChatNVC.
@@ -58,16 +58,19 @@ const basePrompts = {
   `,
 }
 
-export 	interface IntroData {
+export interface IntroData {
   request?: 'empathy' | 'mediation' | 'translation'
   names: string[]
 }
 
-export const getSystemPrompt = (introData: IntroData, askForDonation: boolean) => {
-  const { request, names } = introData
-  const nameString = names.length > 2
-    ? `${names.slice(0, -1).join(', ')}, and ${names.slice(-1)}`
-    : names.join(' and ')
+export const getSystemPrompt = (introData: IntroData & { missingMemberCount?: number }, askForDonation: boolean) => {
+  const { request, names, missingMemberCount } = introData
+
+  if (missingMemberCount) names.push(
+    `and ${missingMemberCount} other user${missingMemberCount > 1 ? 's' : ''}`
+  )
+
+  const nameString = commaListsAnd`${names}`
 
   return stripIndents`
     ${basePrompt}

@@ -6,8 +6,8 @@ import type { Modify } from "../utils.ts"
 import { debug } from "https://deno.land/x/debug@0.2.0/mod.ts"
 
 const log = debug("telegraf:queues")
-type ChatId = Chat["id"]
-type UpdateId = Update["update_id"]
+type ChatId = Chat["id"] // number
+type UpdateId = Update["update_id"] // number
 type Job = Promise<unknown>
 
 type UpdatedQueue = Modify<Queue, {
