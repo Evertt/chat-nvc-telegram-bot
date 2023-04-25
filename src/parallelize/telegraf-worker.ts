@@ -44,14 +44,19 @@ export class TelegrafWorker<C extends Context = Context> extends Telegraf<C> {
   timer: number | undefined
 
   constructor(token: string, options?: Partial<Telegraf.Options<C>>) {
+      log("Telegraf worker being instantiated")
       super(token, options)
-      const noop = () => {}
+      log("Parent Telegraf instantiated...")
       this.launch = (() => {
-        log("Cannot launch a bot worker!")
-      }) as any
+        const error = new Error("Cannot launch a bot worker!")
+        log(error.message)
+        throw error
+      }) as typeof this.launch
 
       const p = parentThread<"stop", Update, UserFromGetMe>()
+      log("Parent thread instantiated, waiting for seed...")
       p.seed.then((me) => {
+        log("seed received, setting bot info")
         this.botInfo = me
       })
       p.onMessage(update => {
@@ -66,6 +71,7 @@ export class TelegrafWorker<C extends Context = Context> extends Telegraf<C> {
         this.queue.push(this.handleUpdate.bind(this), update)
           .finally(() => {
             this.processing--
+            log(`processing ${update.update_id} finished, ${this.processing} updates left`)
             if (this.processing === 0) {
               log("setting timer")
               this.timer = setTimeout(() => {
@@ -77,9 +83,13 @@ export class TelegrafWorker<C extends Context = Context> extends Telegraf<C> {
               }, 1000 * 5)
             }
           })
+
+        log(`pushed update ${JSON.stringify(update)} to queue, returning immediately`)
       })
       this.stop = () => {
-        throw new Error("Cannot stop a bot worker!")
+        const error = new Error("Cannot stop a bot worker!")
+        log(error.message)
+        throw error
       }
   }
 }
