@@ -1,10 +1,12 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 import type { MyContext } from "../context.ts"
-import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
+import { Scenes, Markup, type Context } from "npm:telegraf@4.12.3-canary.1"
+// import { SceneContext } from "npm:telegraf@4.12.3-canary.1/typings/scenes/index.d.ts"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { type Modify, getUserReference } from "../utils.ts"
 import { FEEDBACK_SCENE_ID } from "../constants.ts"
+import type { Simplify } from "npm:type-fest@3.6.1"
 
 const {
 	DEVELOPER_CHAT_ID,
@@ -15,17 +17,10 @@ type SceneState = {
   messages?: string[]
 }
 
-type Session = MyContext["session"]
-type SceneSessionData = Modify<Session["__scenes"], {
-  state?: SceneState
-}>
-type NewSession = Modify<Session, {
-  __scenes: SceneSessionData
-}>
+type SceneSession = Scenes.SceneSessionData<SceneState>
+type SceneContext = Simplify<Omit<Scenes.SceneContext<SceneSession>, keyof Context>>
 
-export type NewContext = Omit<MyContext, "scene">
-  & Modify<MyContext, { session: NewSession }>
-  & { scene: Scenes.SceneContextScene<NewContext, SceneSessionData> }
+export type NewContext = Modify<MyContext, SceneContext>
 
 export const feedbackScene = new Scenes.BaseScene<NewContext>(FEEDBACK_SCENE_ID)
 

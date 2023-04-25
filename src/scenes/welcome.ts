@@ -13,8 +13,6 @@ const {
 	DEVELOPER_CHAT_ID,
 } = Deno.env.toObject()
 
-type Message = MyContext["chatSession"]["messages"][number]
-
 interface PiggyBank {
   id: number,
   credits: number,
@@ -22,26 +20,28 @@ interface PiggyBank {
   given_to: number | null,
 }
 
-type Session = MyContext["session"]
-type NewSession = Modify<Session, {
-  __scenes: Modify<Session["__scenes"], {
-    state?: {
-      leavingIntentionally?: boolean
-      waitingForPiggyBank?: boolean
-      termsMessageId?: number
-      writingFeedback?: boolean
-      haveSentVoiceMessage?: boolean
-    }
-  }>
-}>
-
-type SceneSessionData = NewSession["__scenes"]
-
-export type NewContext = Omit<MyContext, "scene"> & Modify<MyContext, {
-  session: NewSession
-}> & {
-  scene: Scenes.SceneContextScene<NewContext, SceneSessionData>
+type SceneState = {
+  leavingIntentionally?: boolean
+  waitingForPiggyBank?: boolean
+  termsMessageId?: number
+  writingFeedback?: boolean
+  haveSentVoiceMessage?: boolean
 }
+
+type SceneSession = Scenes.SceneSessionData<SceneState>
+type SceneContext = Scenes.SceneContext<SceneSession>
+
+type SceneContextScene = SceneContext["scene"]
+
+type SceneContextSession = SceneContext["session"]
+
+type NewSceneContextSession = Modify<MyContext["session"],
+  { scene: SceneContextScene, session: SceneContextSession }
+>
+
+export type NewContext = Modify<MyContext, {
+  session: NewSceneContextSession
+}>
 
 export const welcomeScene = new Scenes.BaseScene<NewContext>(WELCOME_SCENE_ID)
 
