@@ -1,10 +1,7 @@
-// deno-lint-ignore-file ban-types
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 import "./cycle.js"
 
-// import * as http from "node:http"
 import { bot, me, MyContext, setupStart } from "./bot.ts"
-import { welcomeScene } from "./scenes/welcome.ts"
 import { supabaseStore } from "./middleware/session/session.ts"
 
 import { type Telegraf } from "npm:telegraf@4.12.3-canary.1"
@@ -16,22 +13,14 @@ import {
 	requestTranscript,
 	fetchTranscript,
 	roundToSeconds,
-	errorMessage,
 } from "./utils.ts"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
-import { SMTPClient, type SendConfig } from "https://deno.land/x/denomailer@1.6.0/mod.ts"
-import { delay } from "https://deno.land/std@0.184.0/async/delay.ts"
 
 const {
   TELEGRAM_WEBBOOK_TOKEN,
   DOMAIN = "",
   PORT,
-	EMAIL_HOST,
-	EMAIL_USERNAME,
-	EMAIL_PASSWORD,
-	EMAIL_PORT,
-	DEVELOPER_CHAT_ID,
 } = Deno.env.toObject()
 
 await (async () => {
@@ -44,24 +33,9 @@ await (async () => {
 	addScenesToBot(bot)
 })()
 
-const smtpClient = new SMTPClient({
-	connection: {
-		hostname: EMAIL_HOST,
-		port: +EMAIL_PORT,
-		tls: true,
-		auth: {
-			username: EMAIL_USERNAME,
-			password: EMAIL_PASSWORD,
-		},
-	},
-	pool: {
-		size: 5,
-	}
-})
-
-const EMAIL_TIME_OUT_ERROR = "EMAIL_TIME_OUT"
-
 bot.start(async ctx => {
+	const { welcomeScene } = await import("./scenes/welcome.ts")
+
 	console.log("start command")
 
 	if (ctx.chat.type !== "private")
@@ -132,118 +106,6 @@ bot.command("check_credits", async ctx => {
 	`)
 })
 
-type EmailHandlerConfig = SendConfig & {
-	ctx: MyContext
-	timeout?: number // ms
-}
-
-const emailHandler = async ({ ctx, ...sendConfig }: EmailHandlerConfig) => {
-	console.log("Sending email...", sendConfig)
-
-	const sendPromise = smtpClient.send(sendConfig)
-		.then(() => true)
-
-	const timeoutPromise = delay(sendConfig.timeout ?? 8_000)
-		.then(() => false)
-
-	await ctx.reply(oneLine`
-		I just want to let you know that the email
-		feature has been very unreliable,
-		and I haven't yet figured out why.
-		So I'm going to try to send you the email,
-		but it might not work. I apologize for the inconvenience.
-	`)
-
-	return Promise.race([sendPromise, timeoutPromise])
-		.then(async success => {
-			if (!success) throw EMAIL_TIME_OUT_ERROR
-
-			console.log("Email sent, closing connection...")
-		
-			await ctx.reply(oneLine`
-				Okay, I sent you an email with your chat history.
-				Please check your inbox and / or spambox.
-			`)
-		})
-		.catch(async error => {
-			await ctx.telegram.sendMessage(DEVELOPER_CHAT_ID, stripIndents`
-				A user tryed to send themself an email, but it failed.
-				Here's the error message:
-				
-				\`\`\`
-				${errorMessage(error)}
-				\`\`\`
-
-				And here are the email addresses that were used:
-				From: ${sendConfig.from}
-				To: ${sendConfig.to}
-			`, { parse_mode: "Markdown" })
-			.catch(async error => {
-				console.log("Error sending error message to developer.", error)
-				await ctx.telegram.sendMessage(DEVELOPER_CHAT_ID, stripIndents`
-					I tried to send you an error message about the email feature, but that failed too.
-					Here's the last error message:
-
-					${errorMessage(error)}
-				`).catch(() => {})
-			})
-
-			if (error === EMAIL_TIME_OUT_ERROR) {
-				console.log("Sending email timed out, closing connection...")
-
-				await ctx.reply(oneLine`
-					For some reason, sending the email was hanging / freezing.
-					So I canceled it for now.
-					And I've notified my developer, and he will try to fix it as soon as possible.
-				`)
-			} else {
-				console.log("Error sending email:", error)
-
-				await ctx.reply(oneLine`
-					Oh no, something went wrong while sending the email.
-					My developer has been notified, and he will try to fix it as soon as possible.
-				`)
-			}
-		})
-		.finally(async () => {
-			try {
-				await smtpClient.close()
-			} catch {
-				// ignore
-			}
-		})
-}
-
-bot.command("email", async ctx => {
-	if (ctx.chat.type !== "private") return
-
-	const emailEntity = ctx.message.entities?.find(e => e.type === "email")
-
-	if (!emailEntity) return ctx.reply(oneLine`
-		Please write your email address after the /email command.
-		So for example: /email example@gmail.com
-	`)
-
-	await ctx.reply(oneLine`
-		Okay, I'm preparing the email...
-	`)
-
-	const email = ctx.message.text.slice(emailEntity.offset, emailEntity.offset + emailEntity.length)
-
-	const messages = "<h1>Your Chat History</h1>\n<p>" + ctx.chatSession.messages.map(
-		msg => `<strong>${ctx.chatSession.getName(msg.user_id)}:</strong> ${msg.message}`
-	).join("</p>\n<p>") + "</p>"
-
-	await emailHandler({
-		ctx,
-		from: `ChatNVC <${EMAIL_USERNAME}>`,
-		to: `${ctx.from!.first_name} <${email}>`,
-		subject: "ChatNVC - Chat History",
-		content: "auto",
-		html: messages,
-	})
-})
-
 const getReply = (ctx: MyContext) => {
 	return getAssistantResponse(ctx)
 	.catch((errorResponse: string) => {
@@ -253,6 +115,7 @@ const getReply = (ctx: MyContext) => {
 }
 
 // @ts-expect-error trust me
+// deno-lint-ignore ban-types
 type Ctx = Parameters<Extract<Parameters<typeof bot.on<"text">>[1], Function>>[0]
 
 const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
@@ -346,6 +209,7 @@ const handler = async (ctx: Ctx) => {
 		return await handleGroupChat(ctx, lastMessage)
 
 	if (!ctx.userSession.canConverse) {
+		const { welcomeScene } = await import("./scenes/welcome.ts")
 		return ctx.scene.enter(welcomeScene.id)
 	}
 
@@ -395,8 +259,10 @@ bot.on(message("voice"), async ctx => {
 		`)
 	}
 
-	if (!ctx.userSession.canConverse)
+	if (!ctx.userSession.canConverse) {
+		const { welcomeScene } = await import("./scenes/welcome.ts")
 		return await ctx.scene.enter(welcomeScene.id)
+	}
 
 	await ctx.reply(oneLine`
 		Thanks for sharing, I'm listening.
@@ -470,7 +336,7 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
 				const pausedUpdate: undefined | [
 					transcriptionStart: number,
 					update: Ctx["update"]
-				] = JSON.retrocycle(await supabaseStore.get(`paused-update:${updateId}`))
+				] = await supabaseStore.get(`paused-update:${updateId}`)
 
 				const [transcriptionStart, ctxUpdate] = pausedUpdate ?? []
 

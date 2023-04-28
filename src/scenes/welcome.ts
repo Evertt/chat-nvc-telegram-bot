@@ -12,8 +12,6 @@ const {
 	DEVELOPER_CHAT_ID,
 } = Deno.env.toObject()
 
-type Message = MyContext["chatSession"]["messages"][number]
-
 interface PiggyBank {
   id: number,
   credits: number,

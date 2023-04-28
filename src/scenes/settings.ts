@@ -37,7 +37,7 @@ type SettingsMenu = {
   }
 }
 
-const settingsMenu: SettingsMenu = {
+const settingsMenu: Partial<SettingsMenu> = {
   receiveVoiceTranscriptions: {
     subject: "voice message transcriptions",
     verb: "receive",
@@ -157,7 +157,7 @@ settingsScene.action(/.+/, ctx => {
 
   if (!settingsMenu[key]) throw new Error(`Unknown setting key: ${key}`)
 
-  const { options, required, verb, subject } = settingsMenu[key]
+  const { options, required, verb, subject } = settingsMenu[key]!
   const value = ctx.userSession.settings[key]
   const { settingsMessageId } = ctx.scene.state
 
