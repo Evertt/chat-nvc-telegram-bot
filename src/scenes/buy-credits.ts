@@ -1,5 +1,7 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-import { bot, me, type MyContext } from "../bot.ts"
+import { bot } from "../bot.ts"
+import type { MyContext } from "../context.ts"
+import { me } from "../me.ts"
 import { supabase } from "../middleware/session/session.ts"
 import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
@@ -10,78 +12,8 @@ import type { Simplify } from "npm:type-fest@3.6.1"
 import { chunk } from "npm:lodash-es@4.17.21"
 import CurrencyAPI from "npm:@everapi/currencyapi-js@1.0.6"
 import { delay } from "https://deno.land/std@0.184.0/async/delay.ts"
-
-// These are all the currencies that are supported
-// by both Telegram and Stripe, which also
-// don't have strange exception rules.
-// I've commented out 3, so that the total comes to 60.
-// Which makes it easier to split the currencies into
-// chunks and display them as a keyboard.
-export const supportedCurrencies = [
-  "AED",
-  "ALL",
-  "AMD",
-  "AUD",
-  "AZN",
-  "BAM",
-  "BDT",
-  "BGN",
-  "BND",
-  "BYN",
-  "CAD",
-  "CHF",
-  "CNY",
-  "CZK",
-  "DKK",
-  "DOP",
-  "DZD",
-  "EGP",
-  "ETB",
-  "EUR",
-  "GBP",
-  "GEL",
-  "HKD",
-  // "IDR",
-  "ILS",
-  "INR",
-  "JMD",
-  "KES",
-  "KGS",
-  "KZT",
-  // "LBP",
-  "LKR",
-  "MAD",
-  "MDL",
-  "MNT",
-  "MVR",
-  "MXN",
-  "MYR",
-  "MZN",
-  "NGN",
-  "NOK",
-  "NPR",
-  "NZD",
-  "PHP",
-  "PKR",
-  "PLN",
-  "QAR",
-  "RON",
-  "RSD",
-  "RUB",
-  "SAR",
-  "SEK",
-  "SGD",
-  "THB",
-  "TJS",
-  "TRY",
-  "TTD",
-  "TZS",
-  "UAH",
-  "USD",
-  // "UZS",
-  "YER",
-  "ZAR",
-] as const
+import { BUY_CREDITS_SCENE_ID } from "../constants.ts"
+import { supportedCurrencies } from "../constants.ts"
 
 type Currency = typeof supportedCurrencies[number]
 
@@ -98,8 +30,6 @@ const {
 	STRIPE_TOKEN: PAYMENT_TOKEN = "",
   DEVELOPER_CHAT_ID,
 } = Deno.env.toObject()
-
-export const BUY_CREDITS_SCENE = "BUY_CREDITS"
 
 const currencyKeyboard = Markup.keyboard(
   chunk(supportedCurrencies, 6)
@@ -143,7 +73,7 @@ export type NewContext = Omit<MyContext, "scene"> & Modify<MyContext, {
   scene: Scenes.SceneContextScene<NewContext, SceneSessionData>
 }
 
-export const buyCreditsScene = new Scenes.BaseScene<NewContext>(BUY_CREDITS_SCENE)
+export const buyCreditsScene = new Scenes.BaseScene<NewContext>(BUY_CREDITS_SCENE_ID)
 
 buyCreditsScene.enter(async ctx => {
   await bot.telegram.setMyCommands(
@@ -680,7 +610,7 @@ bot.on("pre_checkout_query", async ctx => {
 // because I want to be able to handle this event even if the user
 // for whatever reason is not in the buyCreditsScene.
 // But for some reason if I do that then the sessions aren't available...
-buyCreditsScene.on(message("successful_payment"), async ctx => {
+bot.on(message("successful_payment"), async ctx => {
   console.log("successful_payment")
   const { self, others, n } = JSON.parse(ctx.message.successful_payment.invoice_payload) as InvoicePayload
 

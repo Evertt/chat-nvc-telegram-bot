@@ -2,7 +2,7 @@ import { getTokens } from "../../../tokenizer.ts"
 import type { NewSession } from "../new-session.ts"
 import { Scenes, type Context } from "npm:telegraf@4.12.3-canary.1"
 import { type Modify, SYSTEM_USER_ID, SYSTEM_NAME } from "../../../utils.ts"
-import { me } from "../../../bot.ts"
+import { me } from "../../../me.ts"
 
 export type Message = {
 	type: "text" | "voice"

@@ -9,10 +9,11 @@ import {
   UserSettings as PrevUserSettings,
 } from "./v3.ts"
 export * from "./v3.ts"
-import { supportedCurrencies } from "../../../scenes/buy-credits.ts"
+import { supportedCurrencies } from "../../../constants.ts"
 
 export type UserSettings = Modify<PrevUserSettings, {
   askForDonation: never
+  notifyOnShutdownDuringTesting: never
   audioTranscriptionService?: "Whisper" | "Conformer-1"
   currency?: typeof supportedCurrencies[number]
   donorName?: string
@@ -64,7 +65,6 @@ export class UserSession implements NewUserSession {
   averageTokenErrorPerMessage = 0
 
   settings: UserSettings = {
-    notifyOnShutdownDuringTesting: false,
 		receiveVoiceTranscriptions: true,
     backendAssistant: "ChatGPT",
     audioTranscriptionService: undefined,
@@ -174,11 +174,28 @@ export class UserSession implements NewUserSession {
   }
 }
 
+type DateStamp = string // ISO 8601
+type UserId = number
+
+export type Statitics = {
+  activeUsers: Set<UserId>
+  newUsers: Set<UserId>
+  creditsUsed: Map<UserId, number>
+}
+
+export class StatisticsSession implements NewSession {
+  version: 1 = 1
+
+  stats = new Map<DateStamp, Statitics>()
+}
+
 export type Sessions<Ctx extends Context = Context> = Modify<PrevSessions<Ctx>, {
   userSession: (ctx: Ctx) => UserSession
+  statistics: (ctx: Ctx) => StatisticsSession
 }>
 
 export const sessions: Sessions = {
   ...prevSessions,
   userSession: ctx => new UserSession(ctx),
+  statistics: () => new StatisticsSession(),
 }

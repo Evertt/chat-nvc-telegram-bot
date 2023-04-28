@@ -1,9 +1,9 @@
-import { bot, type MyContext } from "../bot.ts"
+import { bot } from "../bot.ts"
+import type { MyContext } from "../context.ts"
 import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { askAssistant, type Modify } from "../utils.ts"
-
-export const ROLE_PLAY_SCENE = "ROLE_PLAY"
+import { ROLE_PLAY_SCENE_ID } from "../constants.ts"
 
 type Session = MyContext["session"]
 type NewSession = Modify<Session, {
@@ -23,7 +23,7 @@ export type NewContext = Omit<MyContext, "scene"> & Modify<MyContext, {
   scene: Scenes.SceneContextScene<NewContext, SceneSessionData>
 }
 
-export const rolePlayScene = new Scenes.BaseScene<NewContext>(ROLE_PLAY_SCENE)
+export const rolePlayScene = new Scenes.BaseScene<NewContext>(ROLE_PLAY_SCENE_ID)
 
 type ByName = {
   type: "name"

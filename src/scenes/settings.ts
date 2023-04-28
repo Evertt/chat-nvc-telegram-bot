@@ -1,8 +1,10 @@
-import type { MyContext } from "../bot.ts"
+// deno-lint-ignore-file no-explicit-any
+import type { MyContext } from "../context.ts"
 import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { stripIndents, oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import type { Modify, Union2Tuple } from "../utils.ts"
-import type { ConditionalKeys, Simplify } from "npm:type-fest@3.6.1"
+import type { ConditionalKeys, Simplify, UnionToIntersection } from "npm:type-fest@3.6.1"
+import { SETTINGS_SCENE_ID, supportedCurrencies } from "../constants.ts"
 
 type Settings = MyContext["userSession"]["settings"]
 
@@ -10,6 +12,7 @@ type SettingsKeys = keyof Settings
 
 type SceneState = {
   settingsMessageId?: number
+  reentering?: boolean
 }
 
 type Session = MyContext["session"]
@@ -27,25 +30,37 @@ export type NewContext = Omit<MyContext, "scene"> & Modify<MyContext, {
   scene: Scenes.SceneContextScene<NewContext, SceneSessionData>
 }
 
+type IsUnion<T> = [T] extends [UnionToIntersection<T>] ? false : true
+type IsTuple<T> = T extends [any, ...any]
+    ? true
+    : T extends ReadonlyArray<any>
+        ? T extends Array<any>
+            ? false
+            : true
+        : false
+
+type Setting<key extends SettingsKeys> = NonNullable<Settings[key]>
+
 type SettingsMenu = {
   [key in SettingsKeys]: {
-    subject: string
-    verb: string
-    options: Exclude<Settings[key], undefined> extends boolean
-      ? "boolean" : Union2Tuple<Exclude<Settings[key], undefined>>
-    required: undefined extends Settings[key] ? false : true
+    readonly subject: string
+    readonly verb: string
+    readonly options: Setting<key> extends boolean
+      ? "boolean"
+      : IsTuple<Setting<key>> extends true
+        ? Setting<key>
+        : IsUnion<Setting<key>> extends true
+          ? Union2Tuple<Setting<key>>
+          : Setting<key> extends string
+            ? "string"
+            : never
+    readonly required: undefined extends Settings[key] ? false : true
   }
 }
 
 const settingsMenu: Partial<SettingsMenu> = {
   receiveVoiceTranscriptions: {
     subject: "voice message transcriptions",
-    verb: "receive",
-    options: "boolean",
-    required: true,
-  },
-  notifyOnShutdownDuringTesting: {
-    subject: "notifications when the test-bot is rebooted",
     verb: "receive",
     options: "boolean",
     required: true,
@@ -61,11 +76,22 @@ const settingsMenu: Partial<SettingsMenu> = {
     verb: "be able to use",
     options: ["Whisper", "Conformer-1"],
     required: false,
-  }
+  },
+  donorName: {
+    subject: "donor name",
+    verb: "use as",
+    options: "string",
+    required: false,
+  },
+  currency: {
+    subject: "currency",
+    verb: "use",
+    options: supportedCurrencies,
+    required: false,
+  },
 }
 
-export const SETTINGS_SCENE = "SETTINGS"
-export const settingsScene = new Scenes.BaseScene<NewContext>(SETTINGS_SCENE)
+export const settingsScene = new Scenes.BaseScene<NewContext>(SETTINGS_SCENE_ID)
 
 type EnumKeys = Simplify<ConditionalKeys<Settings, string | undefined>>
 type EnumValues = Exclude<Pick<Settings, EnumKeys>[EnumKeys], undefined> | "undefined"
@@ -136,15 +162,17 @@ settingsScene.action(/^toggle_(.+)$/, ctx => {
 settingsScene.action(/^set_(.+)_to_(.+)$/, ctx => {
   const [key, newValue] = ctx.match.slice(1) as [EnumKeys, EnumValues]
 
+  ctx.scene.state.reentering = true
+
   if (newValue === "undefined") {
     // @ts-expect-error trust me...
     ctx.userSession.settings[key] = undefined
-    return ctx.scene.enter(settingsScene.id, ctx.scene.state, true)
+    return ctx.scene.enter(settingsScene.id, ctx.scene.state)
   }
 
   // @ts-expect-error trust me...
   ctx.userSession.settings[key] = newValue
-  return ctx.scene.enter(settingsScene.id, ctx.scene.state, true)
+  return ctx.scene.enter(settingsScene.id, ctx.scene.state)
 })
 
 settingsScene.action("go_back", ctx =>
@@ -176,25 +204,47 @@ settingsScene.action(/.+/, ctx => {
     ]))
 
   if (value === undefined) {
-    const optionsList = options.map(option => 
-      [Markup.button.callback(`Yes, I want to use ${option}`, `set_${key}_to_${option}`)]
-    )
+    if (Array.isArray(options)) {
+      const optionsList = options.map(option => 
+        [Markup.button.callback(`Yes, I want to use ${option}`, `set_${key}_to_${option}`)]
+      )
 
-    optionsList.push([Markup.button.callback("No, send me back", "go_back")])
+      optionsList.push([Markup.button.callback("No, send me back", "go_back")])
 
+      return ctx.telegram.editMessageText(
+        ctx.chat!.id,
+        settingsMessageId!,
+        undefined,
+        stripIndents`
+          Okay, so currently ${subject} are <b>disabled</b> for you.
+
+          Do you want to enable ${subject}?
+        `,
+        {
+          parse_mode: "HTML",
+          ...Markup.inlineKeyboard(optionsList)
+        }
+      )
+    } else {
+      return ctx.telegram.editMessageText(
+        ctx.chat!.id,
+        settingsMessageId!,
+        undefined,
+        stripIndents`
+          Okay, please write what you'd like to ${verb} ${subject}.
+        `
+      )
+    }
+  }
+
+  if (typeof options === "string") {
     return ctx.telegram.editMessageText(
       ctx.chat!.id,
       settingsMessageId!,
       undefined,
       stripIndents`
-        Okay, so currently ${subject} are <b>disabled</b> for you.
-
-        Do you want to enable ${subject}?
-      `,
-      {
-        parse_mode: "HTML",
-        ...Markup.inlineKeyboard(optionsList)
-      }
+        Okay, please write what you'd like to ${verb} ${subject}.
+      `
     )
   }
 
@@ -237,6 +287,8 @@ settingsScene.leave(async ctx => {
   )
 
   state.settingsMessageId = undefined
+
+  if (state.reentering) return
 
   await ctx.reply(oneLine`
     Great! Your settings have been saved.

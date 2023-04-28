@@ -1,6 +1,6 @@
 // deno-lint-ignore-file
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-import type { ConditionalExcept, Simplify } from "npm:type-fest@3.6.1"
+import type { ConditionalExcept, Simplify, Merge } from "npm:type-fest@3.6.1"
 // import type { Context } from "npm:telegraf@4.12.3-canary.1"
 import type {
 	CreateModerationResponse,
@@ -8,7 +8,8 @@ import type {
 	CreateChatCompletionResponse,
 	ChatCompletionRequestMessage,
 } from "npm:openai@3.2.1"
-import { type MyContext, me } from "./bot.ts"
+import type { MyContext, ChatSession, Message } from "./context.ts"
+import { me } from "./me.ts"
 import { getTokens, MAX_PROMPT_TOKENS, MAX_TOKENS } from "./tokenizer.ts"
 // @deno-types="npm:@types/lodash-es@4.17.6"
 import { findLastIndex } from "npm:lodash-es@4.17.21"
@@ -20,15 +21,10 @@ import type { ParseMode } from "npm:typegram@4.3.0"
 
 const log = debug("telegraf:utils")
 
-export type ChatSession = MyContext["chatSession"]
-export type Message = ChatSession["messages"][number]
-export type SubMessage = Parameters<ChatSession["addMessage"]>[0]
-export type GroupMembers = ChatSession["groupMembers"]
-
 const { OPENAI_KEY, ASSEMBLYAI_KEY, DOMAIN } = Deno.env.toObject()
 
 export type Modify<T, K> = Simplify<
-	Omit<T, keyof K> & ConditionalExcept<K, never>
+	ConditionalExcept<Merge<T, K>, never>
 >
 
 export type MyChatCompletionRequestMessage = ChatCompletionRequestMessage & {

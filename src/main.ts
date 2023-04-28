@@ -1,20 +1,22 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
 
-import { bot, me, MyContext, setupStart } from "./bot.ts"
+import { bot, setupStart } from "./bot.ts"
+import type { MyContext, SubMessage } from "./context.ts"
+import { me } from "./me.ts"
 import { supabaseStore } from "./middleware/session/session.ts"
+import { WELCOME_SCENE_ID } from "./constants.ts"
 
 import { type Telegraf } from "npm:telegraf@4.12.3-canary.1"
 
 import { getTranscription } from "./audio-transcriber.ts"
 import {
-	type SubMessage,
 	getAssistantResponse,
 	requestTranscript,
-	fetchTranscript,
 	roundToSeconds,
 } from "./utils.ts"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
+import { assemblAIWebhook } from "./assemblyai-webhook.ts"
 
 const {
   TELEGRAM_WEBBOOK_TOKEN,
@@ -33,8 +35,6 @@ await (async () => {
 })()
 
 bot.start(async ctx => {
-	const { welcomeScene } = await import("./scenes/welcome.ts")
-
 	console.log("start command")
 
 	if (ctx.chat.type !== "private")
@@ -45,7 +45,7 @@ bot.start(async ctx => {
 	)
 
 	if (!ctx.userSession.haveSpokenBefore || !ctx.userSession.canConverse) {
-		return ctx.scene.enter(welcomeScene.id)
+		return ctx.scene.enter(WELCOME_SCENE_ID)
 	}
 
 	const greeting = oneLine`
@@ -207,10 +207,8 @@ const handler = async (ctx: Ctx) => {
 	if (!chatIsPrivate)
 		return await handleGroupChat(ctx, lastMessage)
 
-	if (!ctx.userSession.canConverse) {
-		const { welcomeScene } = await import("./scenes/welcome.ts")
-		return ctx.scene.enter(welcomeScene.id)
-	}
+	if (!ctx.userSession.canConverse)
+		return ctx.scene.enter(WELCOME_SCENE_ID)
 
 	return await ctx.persistentChatAction(
 		"typing",
@@ -259,8 +257,7 @@ bot.on(message("voice"), async ctx => {
 	}
 
 	if (!ctx.userSession.canConverse) {
-		const { welcomeScene } = await import("./scenes/welcome.ts")
-		return await ctx.scene.enter(welcomeScene.id)
+		return await ctx.scene.enter(WELCOME_SCENE_ID)
 	}
 
 	await ctx.reply(oneLine`
@@ -328,70 +325,8 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
       port: +PORT,
       hookPath: "/",
       secretToken: TELEGRAM_WEBBOOK_TOKEN,
-			cb: async (req, res) => {
-				const url = new URL(req.url!, DOMAIN)
-				const updateId = parseInt(url.searchParams.get("update_id")!)
-
-				const pausedUpdate: undefined | [
-					transcriptionStart: number,
-					update: Ctx["update"]
-				] = await supabaseStore.get(`paused-update:${updateId}`)
-
-				const [transcriptionStart, ctxUpdate] = pausedUpdate ?? []
-
-				if (!ctxUpdate || !transcriptionStart) {
-					console.error("No context found in cache for update", { updateId, ctxUpdate, transcriptionStart })
-					await supabaseStore.delete(`paused-update:${updateId}`)
-					return
-				}
-
-			try {
-					let body = ''
-					// parse each buffer to string and append to body
-					for await (const chunk of req) body += String(chunk)
-					// parse body to object
-					const update = JSON.parse(body) as {
-						status: "completed"
-						transcript_id: string
-					} | {
-						status: "error"
-						error: string
-					}
-
-					if (update.status === "error") {
-						throw ["transcript status error", update.error]
-					}
-
-					const text = await fetchTranscript(update.transcript_id)
-
-					if (!text) {
-						throw ["No text found for transcript status update", updateId]
-					}
-
-					const transcriptionEnd = performance.now()
-					const transcriptionTime = `${roundToSeconds(transcriptionEnd - transcriptionStart)} seconds`
-					// await bot.telegram.sendMessage(ctx.update.message.chat.id, oneLine`
-					// 	All in all, it took ${transcriptionTime} to transcribe your voice message.
-					// 	One thing to note though, is that the service has a start-up time of about 15 to 25 seconds,
-					// 	regardless of the duration of the voice message.
-					// 	But after that, it can transcribe voice messages around 3 to 6 times faster
-					// 	than the duration of the message. So longer voice messages will "feel" faster to transcribe.
-					// 	Maybe it's good to know that the voice message must be longer than 160 ms and shorter than 10 hours.
-					// `)
-					console.log(`Transcribed voice file in ${transcriptionTime}`)
-					ctxUpdate.message.text = text
-
-					await bot.handleUpdate(ctxUpdate)
-				} catch (error) {
-					console.error("error", error)
-					bot.telegram.sendMessage(ctxUpdate.message.chat.id, "There was an error transcribing your voice message.")
-				} finally {
-					await supabaseStore.delete(`paused-update:${updateId}`)
-					res.statusCode = 200
-					res.end()
-				}
-			}
-    }
+			cb: assemblAIWebhook(bot),
+		}
   : undefined
 
 console.log("Starting bot...")

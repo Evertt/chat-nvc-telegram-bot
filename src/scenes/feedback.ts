@@ -1,15 +1,17 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-import { bot, me, type MyContext } from "../bot.ts"
+import { bot } from "../bot.ts"
+import type { MyContext } from "../context.ts"
+import { me } from "../me.ts"
 import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { type Modify, getUserReference } from "../utils.ts"
+import { FEEDBACK_SCENE_ID } from "../constants.ts"
 
 const {
 	DEVELOPER_CHAT_ID,
 } = Deno.env.toObject()
 
-export const FEEDBACK_SCENE = "FEEDBACK"
 
 type SceneState = {
   user?: MyContext["from"]
@@ -28,7 +30,7 @@ export type NewContext = Omit<MyContext, "scene">
   & Modify<MyContext, { session: NewSession }>
   & { scene: Scenes.SceneContextScene<NewContext, SceneSessionData> }
 
-export const feedbackScene = new Scenes.BaseScene<NewContext>(FEEDBACK_SCENE)
+export const feedbackScene = new Scenes.BaseScene<NewContext>(FEEDBACK_SCENE_ID)
 
 feedbackScene.enter(async ctx => {
   await ctx.replyWithHTML(oneLine`

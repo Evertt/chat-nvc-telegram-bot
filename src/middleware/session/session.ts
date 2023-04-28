@@ -82,7 +82,7 @@ export const supabaseStore: AsyncSessionStore<any> = {
 }
 
 const sessionKeyFactories: {
-  [K in keyof LatestSessions]: (ctx: ContextWithMultiSession) => Promise<string | undefined>
+  [K in keyof LatestSessions]: (ctx: ContextWithMultiSession) => Promise<string | undefined> | string | undefined
 } = {
   chatSession: ctx => Promise.resolve(
     ctx.chat ? `chat:${ctx.chat.id}` : undefined
@@ -93,6 +93,7 @@ const sessionKeyFactories: {
   session: ctx => Promise.resolve(
     ctx.chat && ctx.from ? `chat:${ctx.chat.id};user:${ctx.from.id}` : undefined
   ),
+  statistics: () => "statistics",
 }
 
 const sessionMiddlewares: MiddlewareFn<ContextWithMultiSession>[] = []

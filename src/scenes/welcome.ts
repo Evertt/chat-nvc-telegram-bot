@@ -1,12 +1,14 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-import { bot, me, type MyContext } from "../bot.ts"
+import { bot } from "../bot.ts"
+import type { MyContext } from "../context.ts"
+import { me } from "../me.ts"
 import { supabase } from "../middleware/session/session.ts"
 import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
 import { oneLine, oneLineCommaListsAnd, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { getUserReference, type Modify, getAssistantResponse } from "../utils.ts"
-import { buyCreditsScene } from "./buy-credits.ts"
 import { delay } from "https://deno.land/std@0.184.0/async/delay.ts"
+import { WELCOME_SCENE_ID, BUY_CREDITS_SCENE_ID } from "../constants.ts"
 
 const {
 	DEVELOPER_CHAT_ID,
@@ -18,8 +20,6 @@ interface PiggyBank {
   donors: string[],
   given_to: number | null,
 }
-
-export const WELCOME_SCENE = "WELCOME"
 
 type Session = MyContext["session"]
 type NewSession = Modify<Session, {
@@ -42,7 +42,7 @@ export type NewContext = Omit<MyContext, "scene"> & Modify<MyContext, {
   scene: Scenes.SceneContextScene<NewContext, SceneSessionData>
 }
 
-export const welcomeScene = new Scenes.BaseScene<NewContext>(WELCOME_SCENE)
+export const welcomeScene = new Scenes.BaseScene<NewContext>(WELCOME_SCENE_ID)
 
 const lookForPiggyBank = async (ctx: NewContext) => {
   const { data: row } = await supabase
@@ -276,7 +276,7 @@ welcomeScene.action("dont_continue", async ctx => {
 
 welcomeScene.action("buy_credits", async ctx => {
   await ctx.deleteMessage().catch(() => {})
-  await ctx.scene.enter(buyCreditsScene.id)
+  await ctx.scene.enter(BUY_CREDITS_SCENE_ID)
 })
 
 welcomeScene.action("notify_me", async ctx => {

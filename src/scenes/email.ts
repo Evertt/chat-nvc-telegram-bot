@@ -1,11 +1,14 @@
 // deno-lint-ignore-file no-explicit-any
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-import { bot, type MyContext } from "../bot.ts"
+import { bot } from "../bot.ts"
+import type { MyContext } from "../context.ts"
 import { Scenes } from "npm:telegraf@4.12.3-canary.1"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { type Modify, errorMessage } from "../utils.ts"
 import { SMTPClient, type SendConfig } from "https://deno.land/x/denomailer@1.6.0/mod.ts"
+import { delay } from "https://deno.land/std@0.184.0/async/delay.ts"
+import { EMAIL_SCENE_ID } from "../constants.ts"
 
 const {
 	DEBUG = "",
@@ -15,8 +18,6 @@ const {
 	EMAIL_PORT,
 	DEVELOPER_CHAT_ID,
 } = Deno.env.toObject()
-
-export const EMAIL_SCENE = "EMAIL"
 
 type SceneState = {
   emailAddress?: string
@@ -34,7 +35,7 @@ export type NewContext = Omit<MyContext, "scene">
   & Modify<MyContext, { session: NewSession }>
   & { scene: Scenes.SceneContextScene<NewContext, SceneSessionData> }
 
-export const emailScene = new Scenes.BaseScene<NewContext>(EMAIL_SCENE)
+export const emailScene = new Scenes.BaseScene<NewContext>(EMAIL_SCENE_ID)
 
 emailScene.enter(async ctx => {
   await bot.telegram.setMyCommands(
@@ -53,7 +54,7 @@ type EmailHandlerConfig = SendConfig & {
 	timeout?: number // ms
 }
 
-const emailHandler = async ({ ctx, timeout, ...sendConfig }: EmailHandlerConfig) => {
+const emailHandler = async ({ ctx, timeout = 9_000, ...sendConfig }: EmailHandlerConfig) => {
 	console.log("Sending email...", sendConfig)
 
 	const smtpClient = new SMTPClient({
@@ -68,7 +69,7 @@ const emailHandler = async ({ ctx, timeout, ...sendConfig }: EmailHandlerConfig)
 		},
 		pool: {
 			size: 1,
-			timeout: timeout ?? 10_000
+			timeout
 		},
 		debug: {
 			log: !!DEBUG,
@@ -83,7 +84,7 @@ const emailHandler = async ({ ctx, timeout, ...sendConfig }: EmailHandlerConfig)
 		but it might not work. I apologize for the inconvenience.
 	`)
 
-	return await smtpClient.send(sendConfig)
+	const sendPromise = smtpClient.send(sendConfig)
 		.then(async () => {
 			console.log("Email sent, closing connection...")
 		
@@ -91,6 +92,8 @@ const emailHandler = async ({ ctx, timeout, ...sendConfig }: EmailHandlerConfig)
 				Okay, I sent you an email with your chat history.
 				Please check your inbox and / or spambox.
 			`)
+
+			return true
 		})
 		.catch(async error => {
 			console.log("Error sending email, trying to notify developer")
@@ -107,8 +110,6 @@ const emailHandler = async ({ ctx, timeout, ...sendConfig }: EmailHandlerConfig)
 				From: ${sendConfig.from}
 				To: ${sendConfig.to}
 			`, { parse_mode: "Markdown" })
-
-			return error
 			.catch(async (error: any) => {
 				console.log("Error sending error message to developer.", error)
 
@@ -123,7 +124,7 @@ const emailHandler = async ({ ctx, timeout, ...sendConfig }: EmailHandlerConfig)
 			})
 			.then(
 				async (error: any) => {
-					console.log("Error sending email:", error)
+					console.log("Error sending email:", errorMessage(error))
 
 					await ctx.reply(oneLine`
 						Oh no, something went wrong while sending the email.
@@ -131,7 +132,7 @@ const emailHandler = async ({ ctx, timeout, ...sendConfig }: EmailHandlerConfig)
 					`)
 				},
 				async (error: any) => {
-					console.log("Error both sending email AND error message:", error)
+					console.log("Error both sending email AND error message:", errorMessage(error))
 
 					await ctx.reply(oneLine`
 						Oh no, something went wrong while sending the email.
@@ -154,6 +155,34 @@ const emailHandler = async ({ ctx, timeout, ...sendConfig }: EmailHandlerConfig)
 			} catch {
 				// ignore
 			}
+		})
+
+	const timeoutPromise = delay(timeout + 1000)
+		.then(() => false)
+
+	// Still using a race here, because this github issue
+	// seems to suggest that the normal timeout doesn't always work:
+	// @see https://github.com/EC-Nordbund/denomailer/issues/70
+	return Promise.race([sendPromise, timeoutPromise])
+		.then(async (success) => {
+			if (success) return
+			console.log("SMTP client couldn't timeout, so I'm closing it manually.")
+
+			await ctx.telegram.sendMessage(DEVELOPER_CHAT_ID, stripIndents`
+				The SMTP client didn't timeout, so I'm closing it manually.
+			`)
+
+			await ctx.reply(oneLine`
+				Sorry, the email failed to send.
+				I apologize for the inconvenience.
+			`)
+		})
+		.catch(error => {
+			console.log("Error while trying to send telegram messages.", errorMessage(error))
+		})
+		.finally(() => smtpClient.close())
+		.catch(error => {
+			console.log("Couldn't even close the SMTP client...", errorMessage(error))
 		})
 }
 
