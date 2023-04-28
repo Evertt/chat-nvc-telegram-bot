@@ -1,5 +1,4 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-import "./cycle.js"
 
 import { bot, me, MyContext, setupStart } from "./bot.ts"
 import { supabaseStore } from "./middleware/session/session.ts"
