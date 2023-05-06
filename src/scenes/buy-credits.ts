@@ -610,7 +610,7 @@ bot.on("pre_checkout_query", async ctx => {
 // because I want to be able to handle this event even if the user
 // for whatever reason is not in the buyCreditsScene.
 // But for some reason if I do that then the sessions aren't available...
-bot.on(message("successful_payment"), async ctx => {
+buyCreditsScene.on(message("successful_payment"), async ctx => {
   console.log("successful_payment")
   const { self, others, n } = JSON.parse(ctx.message.successful_payment.invoice_payload) as InvoicePayload
 
