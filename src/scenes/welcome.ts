@@ -9,6 +9,7 @@ import { oneLine, oneLineCommaListsAnd, stripIndents } from "https://deno.land/x
 import { getUserReference, type Modify, getAssistantResponse } from "../utils.ts"
 import { delay } from "https://deno.land/std@0.184.0/async/delay.ts"
 import { WELCOME_SCENE_ID, BUY_CREDITS_SCENE_ID } from "../constants.ts"
+import { Buffer } from "node:buffer"
 
 const {
 	DEVELOPER_CHAT_ID,
@@ -131,6 +132,22 @@ const lookForPiggyBank = async (ctx: NewContext) => {
   return ctx.scene.leave()
 }
 
+const getWelcomingVoiceMessage = async () => {
+  const __dirname = new URL('.', import.meta.url).pathname
+  const voiceMessageFile = await Deno.open(`${__dirname}/welcome.ogg`, { read: true })
+  const info = await voiceMessageFile.stat()
+  const data = new Uint8Array(info.size)
+  await voiceMessageFile.read(data)
+
+  try {
+    voiceMessageFile.close()
+  } catch {
+    // ignore
+  }
+
+  return Buffer.from(data)
+}
+
 welcomeScene.enter(async ctx => {
   ctx.scene.state.leavingIntentionally = false
   console.log(ctx.userSession, ctx.scene.state)
@@ -146,7 +163,13 @@ welcomeScene.enter(async ctx => {
   )
 
   if (!ctx.userSession.haveSpokenBefore) {
-    // TODO: Send voice message
+    await ctx.persistentChatAction(
+      "record_voice",
+      async () => {
+        const buffer = await getWelcomingVoiceMessage()
+        await ctx.sendVoice({ source: buffer })
+      }
+    )
 
     ctx.scene.state.haveSentVoiceMessage = true
   
@@ -166,7 +189,13 @@ welcomeScene.enter(async ctx => {
     }
 
     if (!ctx.scene.state.haveSentVoiceMessage) {
-      // TODO: Send voice message
+      await ctx.persistentChatAction(
+        "record_voice",
+        async () => {
+          const buffer = await getWelcomingVoiceMessage()
+          await ctx.sendVoice({ source: buffer })
+        }
+      )
 
       ctx.scene.state.haveSentVoiceMessage = true
 

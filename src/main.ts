@@ -10,6 +10,7 @@ import { type Telegraf } from "npm:telegraf@4.12.3-canary.1"
 
 import { getTranscription } from "./audio-transcriber.ts"
 import {
+askAssistant,
 	getAssistantResponse,
 	requestTranscript,
 	roundToSeconds,
@@ -127,13 +128,33 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 	const reply = ctx.message.reply_to_message
 
 	if (ctx.chatSession.isEmpathyRequestGroup) {
-		if (!wasMentioned && reply?.from?.id !== me.id) return
+		if (wasMentioned || reply?.from?.id === me.id)
+			return await ctx.reply(oneLine`
+				Hey, I'm happy to offer empathy.
+				You can just message me privately
+				and then I'm happy to listen.
+			`, { reply_to_message_id: ctx.message.message_id })
 
-		return await ctx.reply(oneLine`
-			Hey, I'm happy to offer empathy.
-			Anyone can just message me privately
-			and then I'm happy to listen.
-		`, { reply_to_message_id: ctx.message.message_id })
+		if (Math.random() < .2) {
+			ctx.chatSession.resetMessages({
+				message: text,
+				user_id: ctx.from.id,
+			})
+
+			const answer = await askAssistant(ctx, oneLine`
+				Is the user asking for empathy / listening / support
+				in the previous message?
+				Just answer yes or no.
+			`, false)
+
+			if (!/yes/i.test(answer)) return
+
+			return await ctx.reply(oneLine`
+				Hey, if nobody else is available,
+				I'm always available to give empathy.
+				Just message me privately and I'm happy to listen.
+			`, { reply_to_message_id: ctx.message.message_id })
+		}
 	}
 
 	if (!wasMentioned) {
@@ -210,6 +231,18 @@ const handler = async (ctx: Ctx) => {
 	if (!ctx.userSession.canConverse)
 		return ctx.scene.enter(WELCOME_SCENE_ID)
 
+	if ("voice" in ctx.message) {
+		if (ctx.userSession.settings.receiveVoiceTranscriptions) {
+			await ctx.replyWithHTML(stripIndents`
+				Here's what I heard, you can check if I heard you correctly:
+
+				<i>${oneLine`${text}`}</i>
+
+				(If you want me to stop sending these kinds of messages, you can turn it off in your /settings.)
+			`)
+		}
+	}
+
 	return await ctx.persistentChatAction(
 		"typing",
 		() => getReply(ctx)
@@ -249,7 +282,7 @@ bot.on(message("voice"), async ctx => {
 
 			${oneLine`
 				So as you can see, if you want to communicate with me
-				via voice messages, your credits will run much more quickly.
+				via voice messages, your credits will run out much more quickly.
 				But if you're okay with that, then please go to /settings
 				and choose whichever service you want to enable for voice messages.
 		  `}

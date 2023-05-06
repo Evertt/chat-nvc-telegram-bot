@@ -125,14 +125,42 @@ export class UserChatSession implements NewSession {
   __scenes: Scenes.SceneSessionData = {}
 }
 
+type DateStamp = string // ISO 8601
+type UserId = number
+
+export type Statitics = {
+  activeUsers: Set<UserId>
+  newUsers: Set<UserId>
+  creditsUsed: Map<UserId, number>
+}
+
+export class StatisticsSession implements NewSession {
+  version: 1 = 1
+
+  stats = new Map<DateStamp, Statitics>()
+
+	toJSON() {
+		return {
+			...this,
+			stats: [ ...this.stats.entries() ],
+		}
+	}
+
+	restore() {
+		this.stats = new Map(this.stats)
+	}
+}
+
 export type Sessions<Ctx extends Context = Context> = {
 	chatSession: (ctx: Ctx) => ChatSession
 	userSession: (ctx: Ctx) => UserSession
 	session: (ctx: Ctx) => UserChatSession
+	statistics: (ctx: Ctx) => StatisticsSession
 }
 
 export const sessions: Sessions = {
 	chatSession: (ctx) => new ChatSession(ctx),
 	userSession: () => new UserSession(),
 	session: () => new UserChatSession(),
+	statistics: () => new StatisticsSession()
 }

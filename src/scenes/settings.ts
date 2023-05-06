@@ -1,10 +1,13 @@
 // deno-lint-ignore-file no-explicit-any
 import type { MyContext } from "../context.ts"
 import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
+import { message } from "npm:telegraf@4.12.3-canary.1/filters"
 import { stripIndents, oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import type { Modify, Union2Tuple } from "../utils.ts"
 import type { ConditionalKeys, Simplify, UnionToIntersection } from "npm:type-fest@3.6.1"
 import { SETTINGS_SCENE_ID, supportedCurrencies } from "../constants.ts"
+// @deno-types="npm:@types/lodash-es@4.17.6"
+import { chunk } from "npm:lodash-es@4.17.21"
 
 type Settings = MyContext["userSession"]["settings"]
 
@@ -13,6 +16,7 @@ type SettingsKeys = keyof Settings
 type SceneState = {
   settingsMessageId?: number
   reentering?: boolean
+  waitingForInputFor?: SettingsKeys
 }
 
 type Session = MyContext["session"]
@@ -43,8 +47,9 @@ type Setting<key extends SettingsKeys> = NonNullable<Settings[key]>
 
 type SettingsMenu = {
   [key in SettingsKeys]: {
+    readonly dependsOn?: SettingsKeys
     readonly subject: string
-    readonly verb: string
+    readonly verb?: string
     readonly options: Setting<key> extends boolean
       ? "boolean"
       : IsTuple<Setting<key>> extends true
@@ -59,37 +64,39 @@ type SettingsMenu = {
 }
 
 const settingsMenu: Partial<SettingsMenu> = {
+  audioTranscriptionService: {
+    subject: "voice messages",
+    verb: "able to use",
+    options: ["Whisper", "Conformer-1"],
+    required: false,
+  },
   receiveVoiceTranscriptions: {
+    dependsOn: "audioTranscriptionService",
     subject: "voice message transcriptions",
-    verb: "receive",
+    verb: "receiving",
     options: "boolean",
     required: true,
   },
   backendAssistant: {
     subject: "backend assistant",
-    verb: "string",
     options: ["ChatGPT", "Claude"],
     required: true,
   },
-  audioTranscriptionService: {
-    subject: "voice messages",
-    verb: "be able to use",
-    options: ["Whisper", "Conformer-1"],
-    required: false,
-  },
   donorName: {
     subject: "donor name",
-    verb: "use as",
     options: "string",
     required: false,
   },
+  // @ts-ignore excessively deep type
   currency: {
     subject: "currency",
-    verb: "use",
+    // @ts-ignore excessively deep type
     options: supportedCurrencies,
     required: false,
   },
 }
+
+const settingsMenuKeys = Object.keys(settingsMenu).concat("leave") as (SettingsKeys | "leave")[] // Union2Tuple<SettingsKeys>
 
 export const settingsScene = new Scenes.BaseScene<NewContext>(SETTINGS_SCENE_ID)
 
@@ -97,29 +104,41 @@ type EnumKeys = Simplify<ConditionalKeys<Settings, string | undefined>>
 type EnumValues = Exclude<Pick<Settings, EnumKeys>[EnumKeys], undefined> | "undefined"
 
 settingsScene.enter(async ctx => {
+  ctx.scene.state.reentering = false
   console.log("Entering settings scene...")
+  // @ts-ignore excessively deep type
   const currentSettingsList = Object.entries(settingsMenu)
-    .map(([key, { subject, verb }]) => {
+    .flatMap(([key, { subject, verb, dependsOn }]) => {
+      if (dependsOn) {
+        if (ctx.userSession.settings[dependsOn] == null) return []
+      }
+
       const value = ctx.userSession.settings[key as SettingsKeys]
       if (typeof value === "boolean")
         return stripIndents`
 
-          - You <b>${value ? "will" : "will not"}</b> ${verb} ${subject}.
+          - You <b>${value ? "are" : "are not"}</b> ${verb ?? 'using'} ${subject}.
         `
       if (value === undefined)
         return stripIndents`
 
-        - You <b>will not</b> ${verb} ${subject}.
+        - You <b>are not</b> ${verb ?? 'using'} ${subject}.
       `
       
       return stripIndents`
 
-        - You are using <b>${value}</b> to ${verb} ${subject}.
+        - You are using <b>${value}</b> ${verb ? `to ${verb}` : 'as'} ${subject}.
       `
     })
     .join("\n")
 
   const currentSettingsChoices = Object.entries(settingsMenu)
+    .filter(([, { dependsOn }]) => {
+      if (dependsOn) {
+        if (ctx.userSession.settings[dependsOn] == null) return false
+      }
+      return true
+    })
     .map(([key, { subject }]) =>
       [Markup.button.callback(subject, key)]
     )
@@ -175,12 +194,13 @@ settingsScene.action(/^set_(.+)_to_(.+)$/, ctx => {
   return ctx.scene.enter(settingsScene.id, ctx.scene.state)
 })
 
-settingsScene.action("go_back", ctx =>
-  ctx.scene.enter(settingsScene.id, ctx.scene.state, true)
-)
+settingsScene.action("go_back", ctx => {
+  ctx.scene.state.reentering = true
+  ctx.scene.enter(settingsScene.id, ctx.scene.state)
+})
 
-settingsScene.action(/.+/, ctx => {
-  const key = ctx.match[0] as SettingsKeys | "leave"
+settingsScene.action(settingsMenuKeys, ctx => {
+  const key = ctx.match[0] as typeof settingsMenuKeys[number]
   if (key === "leave") return ctx.scene.leave()
 
   if (!settingsMenu[key]) throw new Error(`Unknown setting key: ${key}`)
@@ -205,11 +225,17 @@ settingsScene.action(/.+/, ctx => {
 
   if (value === undefined) {
     if (Array.isArray(options)) {
-      const optionsList = options.map(option => 
-        [Markup.button.callback(`Yes, I want to use ${option}`, `set_${key}_to_${option}`)]
-      )
+      console.log("options.length", options.length)
+
+      const optionsList = options.length > 6
+        ? chunk(options.map(option => Markup.button.callback(option, `set_${key}_to_${option}`)), 6)
+        : options.map(option => 
+          [Markup.button.callback(`Yes, I want to use ${option}`, `set_${key}_to_${option}`)]
+        )
 
       optionsList.push([Markup.button.callback("No, send me back", "go_back")])
+
+      console.log("optionsList", optionsList)
 
       return ctx.telegram.editMessageText(
         ctx.chat!.id,
@@ -226,31 +252,37 @@ settingsScene.action(/.+/, ctx => {
         }
       )
     } else {
+      ctx.scene.state.waitingForInputFor = key
+
       return ctx.telegram.editMessageText(
         ctx.chat!.id,
         settingsMessageId!,
         undefined,
         stripIndents`
-          Okay, please write what you'd like to ${verb} ${subject}.
+          Okay, please write what you'd like to ${verb ?? "use as"} ${subject}.
         `
       )
     }
   }
 
   if (typeof options === "string") {
+    ctx.scene.state.waitingForInputFor = key
+
     return ctx.telegram.editMessageText(
       ctx.chat!.id,
       settingsMessageId!,
       undefined,
       stripIndents`
-        Okay, please write what you'd like to ${verb} ${subject}.
+        Okay, please write what you'd like to ${verb ?? "use as"} ${subject}.
       `
     )
   }
 
-  const optionsList = options.map(option =>
-    [Markup.button.callback(`Yes, I want to use ${option}`, `set_${key}_to_${option}`)]
-  )
+  const optionsList = options.length > 6
+    ? chunk(options.map(option => Markup.button.callback(option, `set_${key}_to_${option}`)), 6)
+    : options.map(option =>
+      [Markup.button.callback(`Yes, I want to use ${option}`, `set_${key}_to_${option}`)]
+    )
 
   if (!required)
     optionsList.push([Markup.button.callback(
@@ -267,7 +299,7 @@ settingsScene.action(/.+/, ctx => {
     settingsMessageId!,
     undefined,
     stripIndents`
-      Okay, so currently using ${value} to ${verb} ${subject}.
+      Okay, so currently using ${value} ${verb ? `to ${verb}` : 'as'} ${subject}.
 
       Do you want to change this?
     `,
@@ -278,13 +310,26 @@ settingsScene.action(/.+/, ctx => {
   )
 })
 
+settingsScene.on(message("text"), ctx => {
+  const { waitingForInputFor } = ctx.scene.state
+
+  if (!waitingForInputFor)
+    return ctx.reply("Sorry, please just choose any of the buttons.")
+
+  ;(ctx.userSession.settings[waitingForInputFor] as string) = ctx.message.text
+
+  ctx.scene.state.reentering = true
+  return ctx.scene.enter(settingsScene.id, ctx.scene.state)
+})
+
 settingsScene.leave(async ctx => {
   const state = ctx.scene.state
 
-  await ctx.telegram.deleteMessage(
-    ctx.chat!.id,
-    state.settingsMessageId!
-  )
+  if (state.settingsMessageId)
+    await ctx.telegram.deleteMessage(
+      ctx.chat!.id,
+      state.settingsMessageId!
+    ).catch(() => {})
 
   state.settingsMessageId = undefined
 

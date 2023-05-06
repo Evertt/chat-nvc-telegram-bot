@@ -174,28 +174,11 @@ export class UserSession implements NewUserSession {
   }
 }
 
-type DateStamp = string // ISO 8601
-type UserId = number
-
-export type Statitics = {
-  activeUsers: Set<UserId>
-  newUsers: Set<UserId>
-  creditsUsed: Map<UserId, number>
-}
-
-export class StatisticsSession implements NewSession {
-  version: 1 = 1
-
-  stats = new Map<DateStamp, Statitics>()
-}
-
 export type Sessions<Ctx extends Context = Context> = Modify<PrevSessions<Ctx>, {
-  userSession: (ctx: Ctx) => UserSession
-  statistics: (ctx: Ctx) => StatisticsSession
+  userSession: (ctx: Ctx) => UserSession,
 }>
 
 export const sessions: Sessions = {
   ...prevSessions,
   userSession: ctx => new UserSession(ctx),
-  statistics: () => new StatisticsSession(),
 }

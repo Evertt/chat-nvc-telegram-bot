@@ -187,10 +187,11 @@ export const getMessagesFromLastCheckpoint = async (ctx: MyContext): Promise<Mes
 	let messagesFromLastCheckpoint = messages.slice(Math.max(i, 0))
 
 	const chatIsPrivate = ctx.chat?.type === "private"
+	const { isEmpathyRequestGroup } = ctx.chatSession
 	let chatMessages = convertToChatMessages(
 		messagesFromLastCheckpoint,
 		chatIsPrivate,
-		chatIsPrivate ? "empathy" : "translation",
+		chatIsPrivate ? "empathy" : isEmpathyRequestGroup ? "empathy_from_group" : "translation",
 		ctx.chatSession,
 	)
 
@@ -239,7 +240,6 @@ export function convertToChatMessages(messages: Message[], excludeNames: boolean
 			names: [ ...allNames ],
 			missingMemberCount: chatSession?.missingGroupMemberCount,
 		},
-		false,
 	)
 
 	chatMessages.unshift({
@@ -282,6 +282,11 @@ export const needsNewCheckPoint = (messages: Message[], chatMessages: MyChatComp
 
 export async function getAssistantResponse(ctx: MyContext, saveInSession = ctx.chatSession?.storeMessages ?? true, temperature = 0.9) {
 	const { chatMessages } = await getMessagesFromLastCheckpoint(ctx)
+
+	let resetCreditsTo = -1
+	if (!ctx.chatSession.isEmpathyRequestGroup) {
+		resetCreditsTo = ctx.userSession.credits.used
+	}
 
 	const moderationResult = await moderate(chatMessages.at(-1)!.content)
 	ctx.userSession.credits.used += chatMessages.at(-1)!.tokens
@@ -361,6 +366,10 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = ctx.c
 		?? estimatedPromptTokenCount
 	ctx.userSession.credits.used += completionResponse.usage?.total_tokens
 		?? ctx.userSession.credits.used + getTokens(assistantMessage?.content)
+
+	if (resetCreditsTo !== -1) {
+		ctx.userSession.credits.used = resetCreditsTo
+	}
 
 	if (finishReason === "content_filter") {
 		ctx.chatSession.messages.pop()

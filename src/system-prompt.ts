@@ -20,13 +20,10 @@ const _formattingExplanation = stripIndents`
   When you want to divide your messages into sections with headings, please use new lines to separate the sections for added clarity.
 `
 
-const donationRequest = stripIndents`
-  If they confirm that they are complete, then tell them that you want to make a request. Explain to them that it costs money to run you and ask them if they are willing to donate 1, 2, or 4 dollars to keep you running.
-  Maybe explain to them how you would love to continue to offer empathy to anybody who may need it and how any donation can support you to continue to do so. And also make clear that this is just a request and that they don't have to pay if they don't want to.
-  Don't say anything about _how_ they can donate to you, there is another system in place for that so you don't need to think about that nor talk about that.
-`
-
 const basePrompts = {
+  empathy_from_group: stripIndents`
+    This is a group chat where users may request for empathy from any other member of the group.
+  `,
   translation: stripIndents`
     You are in a group chat with them (and possibly more people) and they need your help to have a more constructive conversation.
     You will help by empathizing with everyone by guessing their feelings and needs and asking if your guesses resonate with them.
@@ -59,11 +56,11 @@ const basePrompts = {
 }
 
 export interface IntroData {
-  request?: 'empathy' | 'mediation' | 'translation'
+  request?: 'empathy' | 'mediation' | 'translation' | 'empathy_from_group'
   names: string[]
 }
 
-export const getSystemPrompt = (introData: IntroData & { missingMemberCount?: number }, askForDonation: boolean) => {
+export const getSystemPrompt = (introData: IntroData & { missingMemberCount?: number }) => {
   const { request, names, missingMemberCount } = introData
 
   if (missingMemberCount) names.push(
@@ -74,8 +71,7 @@ export const getSystemPrompt = (introData: IntroData & { missingMemberCount?: nu
 
   return stripIndents`
     ${basePrompt}
-    You are speaking to ${nameString}.
+    You are in a chat with ${nameString}.
     ${basePrompts[request!]}
-    ${askForDonation ? donationRequest : ''}
   `
 }
