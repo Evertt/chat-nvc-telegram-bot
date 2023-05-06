@@ -93,7 +93,11 @@ export class ChatSession implements NewSession {
 	}
 
 	restore() {
-		this.groupMembers = new Map(this.groupMembers)
+		if (this.groupMembers instanceof Map) return
+		if (Array.isArray(this.groupMembers))
+			this.groupMembers = new Map(this.groupMembers)
+		else if (typeof this.groupMembers === "object")
+			this.groupMembers = new Map()
 	}
 }
 
