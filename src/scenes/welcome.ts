@@ -256,10 +256,10 @@ welcomeScene.enter(async ctx => {
   return ctx.reply(oneLine`
     I'm sorry, but you've used up all your credits.
     Do you want to buy some more?
-    Or do you want to be notified when a new piggy bank becomes available?
+    Or would you like to check if there's a piggy bank available?
   `, Markup.inlineKeyboard([
     [ Markup.button.callback("I want to buy credits", "buy_credits") ],
-    [ Markup.button.callback("I'd like to be notified", "notify_me") ],
+    [ Markup.button.callback("Please check if there's a piggy bank", "take_piggy_bank") ],
   ]))
 })
 
