@@ -363,7 +363,7 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
   : undefined
 
 console.log("Starting bot...")
-bot.launch({ webhook, dropPendingUpdates: !!webhook })
+bot.launch({ webhook, dropPendingUpdates: !webhook })
 	.catch(error => {
 		console.error(error)
 		Deno.exit(1)
