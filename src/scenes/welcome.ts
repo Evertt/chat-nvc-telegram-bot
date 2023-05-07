@@ -10,35 +10,16 @@ import { getUserReference, type Modify, getAssistantResponse } from "../utils.ts
 import { delay } from "https://deno.land/std@0.184.0/async/delay.ts"
 import { WELCOME_SCENE_ID, BUY_CREDITS_SCENE_ID } from "../constants.ts"
 import { Buffer } from "node:buffer"
+import type { PiggyBank, WelcomeSceneSession } from "./types.ts"
 
 const {
 	DEVELOPER_CHAT_ID,
 } = Deno.env.toObject()
 
-interface PiggyBank {
-  id: number,
-  credits: number,
-  donors: string[],
-  given_to: number | null,
-}
-
-type Session = MyContext["session"]
-type NewSession = Modify<Session, {
-  __scenes: Modify<Session["__scenes"], {
-    state?: {
-      leavingIntentionally?: boolean
-      waitingForPiggyBank?: boolean
-      termsMessageId?: number
-      writingFeedback?: boolean
-      haveSentVoiceMessage?: boolean
-    }
-  }>
-}>
-
-type SceneSessionData = NewSession["__scenes"]
+type SceneSessionData = WelcomeSceneSession["__scenes"]
 
 export type NewContext = Omit<MyContext, "scene"> & Modify<MyContext, {
-  session: NewSession
+  session: WelcomeSceneSession
 }> & {
   scene: Scenes.SceneContextScene<NewContext, SceneSessionData>
 }
@@ -311,7 +292,7 @@ welcomeScene.action("buy_credits", async ctx => {
 welcomeScene.action("notify_me", async ctx => {
   await ctx.deleteMessage().catch(() => {})
 
-  ctx.scene.state.waitingForPiggyBank = true
+  ctx.scene.state.waitingForPiggyBank = Date.now()
 
   await ctx.reply(oneLine`
     Okay, I'll notify you when somebody donates a new piggy bank.

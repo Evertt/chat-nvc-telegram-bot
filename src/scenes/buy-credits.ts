@@ -5,15 +5,16 @@ import { me } from "../me.ts"
 import { supabase } from "../middleware/session/session.ts"
 import { Scenes, Markup } from "npm:telegraf@4.12.3-canary.1"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
-import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
+import { oneLine, stripIndents, oneLineCommaListsAnd } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { errorMessage, type Modify, getAssistantResponse } from "../utils.ts"
-import type { Simplify } from "npm:type-fest@3.6.1"
+import type { Simplify, SetOptional } from "npm:type-fest@3.6.1"
 // @deno-types="npm:@types/lodash-es@4.17.6"
 import { chunk } from "npm:lodash-es@4.17.21"
 import CurrencyAPI from "npm:@everapi/currencyapi-js@1.0.6"
 import { delay } from "https://deno.land/std@0.184.0/async/delay.ts"
 import { BUY_CREDITS_SCENE_ID } from "../constants.ts"
 import { supportedCurrencies } from "../constants.ts"
+import type { PiggyBank, WelcomeSceneSession } from "./types.ts"
 
 type Currency = typeof supportedCurrencies[number]
 
@@ -339,19 +340,21 @@ buyCreditsScene.hears(/^\s*(?:\$|USD)?\s*(-?\d+)\s*(?:\$|USD)?$|([A-Z]{3})|(^.+$
     await ctx.sendChatAction("typing")
     await delay(500)
 
-    return await ctx.reply(oneLine`
-      We always add a name to the list of donors for each piggy bank.
-      By default that name is "anonymous",
-      but if you'd like you could write your name or a pseudonym,
-      so that people can know who contributed to their piggy banks.
-      Whatever you write in your next message will be the name we use.
-    `, Markup.keyboard([
-      ["anonymous"],
-    ]).resize().oneTime())
+    if (!ctx.userSession.settings.donorName) {
+      return await ctx.reply(oneLine`
+        We always add a name to the list of donors for each piggy bank.
+        By default that name is "anonymous",
+        but if you'd like you could write your name or a pseudonym,
+        so that people can know who contributed to their piggy banks.
+        Whatever you write in your next message will be the name we use.
+      `, Markup.keyboard([
+        ["anonymous", ctx.userSession.settings.donorName ?? ""].filter(Boolean),
+      ]).resize().oneTime())
+    }
   }
 
-  if (state.wantsToDonate && !state.identity && !ctx.userSession.settings.donorName) {
-    if (!name) {
+  if (state.wantsToDonate && !state.identity) {
+    if (!name && !ctx.userSession.settings.donorName) {
       return await ctx.reply(oneLine`
         Sorry, but your message doesn't seem to contain a name.
         Can you please try it again?
@@ -361,13 +364,15 @@ buyCreditsScene.hears(/^\s*(?:\$|USD)?\s*(-?\d+)\s*(?:\$|USD)?$|([A-Z]{3})|(^.+$
       ]))
     }
 
-    const isAnonymous = /anonymous/.test(name)
-    state.identity = isAnonymous ? "anonymous" : name
-    ctx.userSession.settings.donorName = state.identity
+    const identity = name || ctx.userSession.settings.donorName!
+    const isAnonymous = /anonymous/.test(identity)
+    state.identity = isAnonymous ? "anonymous" : identity
 
-    const message = isAnonymous
-      ? "Okay, I'll add you as an anonymous donor."
-      : `Okay, I'll add you as a donor with the name "${name}".`
+    const message = ctx.userSession.settings.donorName
+      ? ""
+      : isAnonymous
+        ? "Okay, I'll add you as an anonymous donor."
+        : `Okay, I'll add you as a donor with the name "${name}".`
 
     const currency = ctx.userSession.settings.currency
       ?? state.currency ?? "USD"
@@ -381,18 +386,26 @@ buyCreditsScene.hears(/^\s*(?:\$|USD)?\s*(-?\d+)\s*(?:\$|USD)?$|([A-Z]{3})|(^.+$
         for the total of ${creditsInTotal.toLocaleString(lc)} credits.
       `
 
-    return await ctx.reply(stripIndents`
+    await ctx.reply(stripIndents`
       ${message}
-      This is now also saved in your settings.
-      So that next time we can skip this step.
-      If you want to change your donor name,
-      you can do that in your settings.
+
+      ${ctx.userSession.settings.donorName
+        ? ""
+        : oneLine`
+          This is now also saved in your settings.
+          So that next time we can skip this step.
+          If you want to change your donor name,
+          you can do that in your settings.
+        `
+      }
 
       ${currencyMessage} Do you want to go to checkout?
-    `, Markup.inlineKeyboard([
+    `.trim(), Markup.inlineKeyboard([
       [Markup.button.callback(`Yes, I'd like to pay in ${currency}`, "continue")],
       [Markup.button.callback("No, first change my currency", "change_currency")],
     ]))
+
+    return ctx.userSession.settings.donorName = state.identity
   }
 
   if (currency) {
@@ -472,6 +485,112 @@ buyCreditsScene.action("continue", async ctx => {
     max_tip_amount: 0,
 	})
 })
+
+const giveWaitingPeoplePiggyBanks = async (ctx: MyContext) => {
+  const { data } = await supabase
+    .from("piggy_banks")
+    .select()
+    .is("given_to", null)
+    .order("credits", { ascending: true })
+    .order("created_at", { ascending: true })
+    .order("updated_at", { ascending: false, nullsFirst: false })
+
+  if (!data?.length) return
+
+  const availablePiggyBanks = data as PiggyBank[]
+
+  const { data: rows, error } = await supabase
+    .from("sessions")
+    .select()
+    .not("id", "like", "test%")
+    .not("session->__scenes->state->waitingForPiggyBank", "is", null)
+    .order("session->__scenes->state->waitingForPiggyBank", { ascending: true })
+    .limit(availablePiggyBanks.length)
+
+  if (error) {
+    console.error(error)
+    return
+  }
+
+  const peopleWaiting = [ ...rows.entries() ] as [number, {
+    id: `chat:${number};user:${number}`
+    session: Modify<WelcomeSceneSession, {
+      __scenes: SetOptional<WelcomeSceneSession["__scenes"], "current">
+    }>
+  }][]
+
+  for (const [i, { id, session: userChatSession }] of peopleWaiting) {
+    const { groups } = id.match(/^chat:(?<chatId>\d+);user:(?<userId>\d+)$/)!
+    const { chatId, userId } = groups! as { chatId: string, userId: string }
+
+    const { data } = await supabase
+      .from("sessions")
+      .select()
+      .eq("id", `user:${userId}`)
+      .single() as { data: { id: `user:${number}`; session: Simplify<MyContext["userSession"]> } }
+
+    const { id: userSessionId, session: userSession } = data
+
+    const piggyBank = availablePiggyBanks[i]
+    userSession.credits.received_from_gifts += piggyBank.credits
+    ;(userSession.credits.available as number) += piggyBank.credits
+    piggyBank.given_to = Number(userSessionId.split(":")[1])
+    userChatSession.__scenes = {}
+
+    let { error } = await supabase
+      .from("sessions")
+      .update({ session: userSession })
+      .eq("id", userSessionId)
+
+    if (error) {
+      console.error(error)
+      continue
+    }
+
+    (
+      { error } = await supabase
+        .from("piggy_banks")
+        .update({ given_to: piggyBank.given_to })
+        .eq("id", piggyBank.id)
+    )
+
+    if (error) {
+      console.error(error)
+      continue
+    }
+
+    (
+      { error } = await supabase
+        .from("sessions")
+        .update({ session: userChatSession })
+        .eq("id", id)
+    )
+
+    if (error) {
+      console.error(error)
+      continue
+    }
+
+    await ctx.telegram.sendMessage(chatId, oneLineCommaListsAnd`
+      You were gifted a piggy bank with ${piggyBank.credits} credits in it!
+      It was donated by ${piggyBank.donors}.
+      ${
+        userSession.credits.available > 0
+        ? oneLine`
+          You now have ${userSession.credits.available} credits available to use.
+          So we can talk now, if you'd like. 😌
+        `
+        : oneLine`
+          Unfortunately, you are still at ${userSession.credits.available} credits.
+          So we can't talk quite yet. You can either buy some extra credits,
+          or opt to wait for another piggy bank. Just say anything to start that process.
+        `
+      }
+    `)
+  }
+
+  return peopleWaiting.length
+}
 
 const createPurchaseInDb = async (ctx: MyContext, purchase: Purchase) => {
   const { error } = await supabase
@@ -579,6 +698,17 @@ const createPurchaseInDb = async (ctx: MyContext, purchase: Purchase) => {
 
     ${piggyBanksMessage}
   `)
+
+  const numOfPiggyBanksGifted = await giveWaitingPeoplePiggyBanks(ctx)
+
+  if (num_of_piggy_banks && numOfPiggyBanksGifted) {
+    await ctx.reply(oneLine`
+      Oh and ${numOfPiggyBanksGifted}
+      ${numOfPiggyBanksGifted === 1 ? "person" : "people"}
+      who were already waiting for a piggy bank have now
+      immediately been gifted one, thanks to you! 🙏
+    `)
+  }
 
   return await ctx.scene.leave()
 }
