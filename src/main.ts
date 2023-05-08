@@ -3,7 +3,7 @@ import "https://deno.land/std@0.179.0/dotenv/load.ts"
 import { bot, setupStart } from "./bot.ts"
 import type { MyContext, SubMessage } from "./context.ts"
 import { me } from "./me.ts"
-import { supabaseStore } from "./middleware/session/session.ts"
+import { supabaseStore, supabase, type AllMySessions } from "./middleware/session/session.ts"
 import { WELCOME_SCENE_ID } from "./constants.ts"
 
 import { type Telegraf } from "npm:telegraf@4.12.3-canary.1"
@@ -18,11 +18,13 @@ askAssistant,
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
 import { assemblAIWebhook } from "./assemblyai-webhook.ts"
+import type { SetOptional } from "npm:type-fest@3.6.1"
 
 const {
   TELEGRAM_WEBBOOK_TOKEN,
   DOMAIN = "",
   PORT,
+	SUPABASE_PREFIX = "",
 } = Deno.env.toObject()
 
 await (async () => {
@@ -106,6 +108,134 @@ bot.command("check_credits", async ctx => {
 	`)
 })
 
+bot.command("is_empathy_requesting_group", async ctx => {
+	if (ctx.chat.type === "private")
+		return await ctx.reply(oneLine`
+			Sorry, this command only works in a group chat.
+		`)
+	
+	ctx.chatSession.isEmpathyRequestGroup = true
+
+	bot.telegram.setMyCommands(
+    [{
+			command: "is_not_empathy_requesting_group",
+			description: "Let me know that this is not an empathy requesting group (anymore).",
+		}],
+    { scope: { type: "chat", chat_id: ctx.chat.id } }
+  )
+
+	return await ctx.reply(oneLine`
+		Okay, thanks for letting me know
+		that this group is for requesting empathy. 🙂
+	`)
+})
+
+bot.command("is_not_empathy_requesting_group", async ctx => {
+	if (ctx.chat.type === "private")
+		return await ctx.reply(oneLine`
+			Sorry, this command only works in a group chat.
+		`)
+
+	ctx.chatSession.isEmpathyRequestGroup = false
+
+	bot.telegram.setMyCommands(
+    [{
+			command: "is_empathy_requesting_group",
+			description: "Let me know that this is an empathy requesting group.",
+		}],
+    { scope: { type: "chat", chat_id: ctx.chat.id } }
+  )
+
+	return await ctx.reply(oneLine`
+		Okay, thanks for letting me know
+		that this group is not an empathy requesting group (anymore). 🙂
+	`)
+})
+
+bot.on(message("new_chat_members"), async ctx => {
+	if (ctx.chat.type === "private") return
+
+	const { new_chat_members } = ctx.message
+
+	let meWasAdded = false
+
+	for (const newMember of new_chat_members) {
+		if (newMember.id === ctx.botInfo.id) {
+			meWasAdded = true
+			continue
+		}
+
+		ctx.chatSession.groupMembers.set(newMember.id, {
+			id: newMember.id,
+			username: newMember.username,
+			first_name: newMember.first_name,
+		})
+	}
+
+	ctx.chatSession.groupMemberCount =
+		(await bot.telegram.getChatMembersCount(ctx.chat.id)) - 1
+
+	if (meWasAdded) {
+		bot.telegram.setMyCommands(
+			[{
+				command: "is_empathy_requesting_group",
+				description: "Let me know that this is an empathy requesting group.",
+			}],
+			{ scope: { type: "chat", chat_id: ctx.chat.id } }
+		)
+
+		await ctx.replyWithHTML(stripIndents`
+			${oneLine`
+				Hey, thanks for adding me to this group! 😊
+				I'm a AI bot that can offer empathy to the best of my abilities.
+				I want to explain a bit about how I work.
+			`}
+
+			${oneLine`
+				In a group, I have two modes of working. By default, I start in
+				"support mode", which means that when asked,
+				I will try to guess the feelings and needs of people in the group.
+				Although, as long as I'm not asked, I will stay silent.
+			`}
+
+			${oneLine`
+				If this group is a group for requesting empathy,
+				then you can let me know by typing /is_empathy_requesting_group.
+				Then I will switch to a different mode, where I will once in a while
+				remind people that I'm always available to offer empathy.
+				(You know, in case no one else is available.) And that you can just
+				<a href="tg://user?id=${ctx.botInfo.id}">message me privately</a>
+				and then I'll be there for you.
+			`}
+		`)
+	}
+})
+
+bot.on(message("left_chat_member"), async ctx => {
+	if (ctx.chat.type === "supergroup") return
+
+	const { left_chat_member } = ctx.message
+	
+	if (left_chat_member.id !== ctx.botInfo.id) {
+		ctx.chatSession.groupMembers.delete(left_chat_member.id)
+
+		return ctx.chatSession.groupMemberCount =
+			(await bot.telegram.getChatMembersCount(ctx.chat.id)) - 1
+	}
+
+	const newCtx = ctx as SetOptional<typeof ctx, keyof AllMySessions>
+	newCtx.chatSession = undefined
+	newCtx.session = undefined
+	
+	const { error } = await supabase
+		.from("sessions")
+		.delete()
+		.like("id", `${SUPABASE_PREFIX}chat:${ctx.chat.id}%`)
+
+	if (error) console.error(error)
+	else console.log(`Deleted ${SUPABASE_PREFIX}chat:${ctx.chat.id} from Supabase.`)
+})
+
 const getReply = (ctx: MyContext) => {
 	return getAssistantResponse(ctx)
 	.catch((errorResponse: string) => {
@@ -118,7 +248,7 @@ const getReply = (ctx: MyContext) => {
 // deno-lint-ignore ban-types
 type Ctx = Parameters<Extract<Parameters<typeof bot.on<"text">>[1], Function>>[0]
 
-const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
+const handleGroupChat = async (ctx: Ctx /*, lastMessage: SubMessage */) => {
 	const { text } = ctx.message
 
 	const wasMentioned = "voice" in ctx.message
@@ -161,15 +291,6 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 		if (reply?.from?.id !== me.id) return
 	}
 
-	if (text.includes("/keep_track")) {
-		ctx.chatSession.storeMessages = true
-
-		return ctx.reply(oneLine`
-			Okay, I'll keep track of all messages in this group from now on.
-			So that I can hopefully offer better empathy when asked.
-		`)
-	}
-
 	if (!ctx.userSession.canConverse)
 		return await ctx.reply(oneLine`
 			I'm sorry, but you've run out of credits.
@@ -177,26 +298,26 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 			Or so that I can put you on the waiting list for a piggy bank.
 		`)
 
-	if (!ctx.chatSession.storeMessages && reply) {
-		let text = "text" in reply ? reply.text : ""
+	// if (!ctx.chatSession.storeMessages && reply) {
+	// 	let text = "text" in reply ? reply.text : ""
 
-		if ("voice" in reply) {
-			const { file_id } = reply.voice
-			const fileLink = await ctx.telegram.getFileLink(file_id)
-			text = await getTranscription(fileLink as URL)
-		}
+	// 	if ("voice" in reply) {
+	// 		const { file_id } = reply.voice
+	// 		const fileLink = await ctx.telegram.getFileLink(file_id)
+	// 		text = await getTranscription(fileLink as URL)
+	// 	}
 
-		ctx.chatSession.resetMessages()
+	// 	ctx.chatSession.resetMessages()
 
-		ctx.chatSession.addMessage({
-			type: "text" in reply ? "text" : "voice",
-			user_id: reply.from!.id,
-			message: text,
-			date: new Date(reply.date).toString(),
-		})
+	// 	ctx.chatSession.addMessage({
+	// 		type: "text" in reply ? "text" : "voice",
+	// 		user_id: reply.from!.id,
+	// 		message: text,
+	// 		date: new Date(reply.date).toString(),
+	// 	})
 
-		ctx.chatSession.addMessage(lastMessage)
-	}
+	// 	ctx.chatSession.addMessage(lastMessage)
+	// }
 
 	return await ctx.persistentChatAction(
 		"typing",
@@ -226,7 +347,7 @@ const handler = async (ctx: Ctx) => {
 	}
 
 	if (!chatIsPrivate)
-		return await handleGroupChat(ctx, lastMessage)
+		return await handleGroupChat(ctx /*, lastMessage */)
 
 	if (!ctx.userSession.canConverse)
 		return ctx.scene.enter(WELCOME_SCENE_ID)
@@ -322,34 +443,6 @@ bot.on(message("voice"), async ctx => {
 		ctx.message.text = text
 		return await handler(ctx as unknown as Ctx)
 	}
-})
-
-bot.on(message("new_chat_members"), async ctx => {
-	if (ctx.chat.type === "supergroup") return
-
-	const { new_chat_members } = ctx.message
-
-	for (const newMember of new_chat_members) {
-		ctx.chatSession.groupMembers.set(newMember.id, {
-			id: newMember.id,
-			username: newMember.username,
-			first_name: newMember.first_name,
-		})
-	}
-
-	ctx.chatSession.groupMemberCount =
-		await bot.telegram.getChatMembersCount(ctx.chat.id)
-})
-
-bot.on(message("left_chat_member"), async ctx => {
-	if (ctx.chat.type === "supergroup") return
-
-	const { left_chat_member } = ctx.message
-
-	ctx.chatSession.groupMembers.delete(left_chat_member.id)
-
-	ctx.chatSession.groupMemberCount =
-		await bot.telegram.getChatMembersCount(ctx.chat.id)
 })
 
 const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN

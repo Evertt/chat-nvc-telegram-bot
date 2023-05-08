@@ -14,7 +14,7 @@ export const addMiddlewaresToBot = <C extends ContextWithMultiSession = ContextW
     ...sessionMiddlewares,
     migrateSessionMiddleware,
     rememberWeHaveSpokenBeforeMiddleware,
-    saveRecentChatsMiddleware,
+    // saveRecentChatsMiddleware,
   )
   console.log("Bot middleware set up.")
 }

@@ -65,14 +65,14 @@ const sayGoodyeToRecentChats = async () => {
 }
 
 // Enable graceful stop
-Deno.addSignalListener("SIGINT", async () => {
-  if (!DOMAIN) await sayGoodyeToRecentChats()
+Deno.addSignalListener("SIGINT", () => {
+  // if (!DOMAIN) await sayGoodyeToRecentChats()
   bot.stop("SIGINT")
   Deno.exit()
 })
 
-Deno.addSignalListener("SIGTERM", async () => {
-  if (!DOMAIN) await sayGoodyeToRecentChats()
+Deno.addSignalListener("SIGTERM", () => {
+  // if (!DOMAIN) await sayGoodyeToRecentChats()
   bot.stop("SIGTERM")
   Deno.exit()
 })

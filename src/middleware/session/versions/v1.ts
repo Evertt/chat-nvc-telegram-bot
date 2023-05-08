@@ -32,7 +32,7 @@ export class ChatSession implements NewSession {
   storeMessages: boolean
 	isEmpathyRequestGroup = false
   language_code: string
-  type: "private" | "group"
+  type: NonNullable<Context["chat"]>["type"]
 	groupMembers = new Map<number, User>()
 	groupMemberCount = 0
 
@@ -48,10 +48,11 @@ export class ChatSession implements NewSession {
 	}
 
 	constructor(ctx: Context) {
-		const isPrivate = ctx.chat?.type === "private"
-		this.storeMessages = isPrivate
+		const { type: chatType } = ctx.chat!
+		const isPrivate = chatType === "private"
+		this.storeMessages = isPrivate || chatType === "group"
 		this.language_code = isPrivate ? ctx.from?.language_code ?? "en" : "en"
-		this.type = ctx.chat?.type === "private" ? "private" : "group"
+		this.type = chatType
 		if (!isPrivate) return
 		this.groupMemberCount = 1
 		if (!ctx.from) return

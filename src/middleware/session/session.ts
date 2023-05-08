@@ -14,7 +14,7 @@ const {
 
 type LatestSessions = typeof latestSessions
 
-type AllMySessions = {
+export type AllMySessions = {
   [K in keyof LatestSessions]: ReturnType<LatestSessions[K]>
 }
 
