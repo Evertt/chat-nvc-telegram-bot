@@ -246,7 +246,7 @@ const getReply = (ctx: MyContext) => {
 // deno-lint-ignore ban-types
 type Ctx = Parameters<Extract<Parameters<typeof bot.on<"text">>[1], Function>>[0]
 
-const handleGroupChat = async (ctx: Ctx /*, lastMessage: SubMessage */) => {
+const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 	const { text } = ctx.message
 
 	const wasMentioned = "voice" in ctx.message
@@ -343,7 +343,7 @@ const handler = async (ctx: Ctx) => {
 	}
 
 	if (!chatIsPrivate)
-		return await handleGroupChat(ctx /*, lastMessage */)
+		return await handleGroupChat(ctx, lastMessage)
 
 	if (!ctx.userSession.canConverse)
 		return ctx.scene.enter(WELCOME_SCENE_ID)
