@@ -24,6 +24,8 @@ export const assemblAIWebhook: (bot: Telegraf<MyContext>) => WebHook = bot => as
     update: Ctx["update"]
   ] = await supabaseStore.get(`paused-update:${updateId}`)
 
+  console.log(`paused-update:${updateId}`, pausedUpdate)
+
   const [transcriptionStart, ctxUpdate] = pausedUpdate ?? []
 
   if (!ctxUpdate || !transcriptionStart) {
