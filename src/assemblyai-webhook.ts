@@ -32,7 +32,7 @@ export const assemblAIWebhook: (bot: Telegraf<MyContext>) => WebHook = bot => as
     return
   }
 
-try {
+  try {
     let body = ''
     // parse each buffer to string and append to body
     for await (const chunk of req) body += String(chunk)
@@ -67,8 +67,6 @@ try {
     // `)
     console.log(`Transcribed voice file in ${transcriptionTime}`)
     ctxUpdate.message.text = text
-
-    await bot.handleUpdate(ctxUpdate)
   } catch (error) {
     console.error("error", error)
     bot.telegram.sendMessage(ctxUpdate.message.chat.id, "There was an error transcribing your voice message.")
@@ -77,4 +75,8 @@ try {
     res.statusCode = 200
     res.end()
   }
+
+  bot.handleUpdate(ctxUpdate)
+    .then(() => console.log("responded to voice message"))
+    .catch(error => console.error("error responding to voice message", error))
 }
