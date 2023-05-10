@@ -81,11 +81,11 @@ export const supabaseStore: AsyncSessionStore<any> = {
   },
 }
 
-const pausedUpdate = await supabaseStore.get("paused-update:532384950")
-const [transcriptionStart, ctxUpdate] = pausedUpdate ?? []
+// const pausedUpdate = await supabaseStore.get("paused-update:532384950")
+// const [transcriptionStart, ctxUpdate] = pausedUpdate ?? []
 
-console.log("transcriptionStart", transcriptionStart)
-console.log("ctxUpdate", ctxUpdate)
+// console.log("transcriptionStart", transcriptionStart)
+// console.log("ctxUpdate", ctxUpdate)
 
 const sessionKeyFactories: {
   [K in keyof LatestSessions]: (ctx: ContextWithMultiSession) => Promise<string | undefined> | string | undefined
