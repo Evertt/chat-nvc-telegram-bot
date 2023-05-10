@@ -69,10 +69,6 @@ bot.help(ctx => ctx.reply(oneLine`
 	I'm ChatNVC, a bot that tries to listen to you empathically.
 	You can make me forget our conversation by typing /start,
   in case you want to start fresh.
-	I also just want to mention that it does cost money to keep me running,
-	so I'm basically able to run based on donations.
-	So if you'd like to contribute, so that I can keep offering empathy to people,
-	you can do so by typing /donate.
 `))
 
 bot.command("check_credits", async ctx => {
@@ -152,6 +148,33 @@ bot.command("is_not_empathy_requesting_group", async ctx => {
 	`)
 })
 
+const introduceMyself = async (ctx: MyContext) => {
+	await ctx.replyWithHTML(stripIndents`
+			${oneLine`
+				Hey, thanks for adding me to this group! 😊
+				I'm a AI bot that can offer empathy to the best of my abilities.
+				I want to explain a bit about how I work.
+			`}
+
+			${oneLine`
+				In a group, I have two modes of working. By default, I start in
+				"support mode", which means that when asked,
+				I will try to guess the feelings and needs of people in the group.
+				Although, as long as I'm not asked, I will stay silent.
+			`}
+
+			${oneLine`
+				If this group is a group for requesting empathy,
+				then you can let me know by typing /is_empathy_requesting_group.
+				Then I will switch to a different mode, where I will once in a while
+				remind people that I'm always available to offer empathy.
+				(You know, in case no one else is available.) And that you can just
+				<a href="tg://user?id=${ctx.botInfo.id}">message me privately</a>
+				and then I'll be there for you.
+			`}
+		`)
+}
+
 bot.on(message("new_chat_members"), async ctx => {
 	if (ctx.chat.type === "private") return
 
@@ -184,36 +207,11 @@ bot.on(message("new_chat_members"), async ctx => {
 			{ scope: { type: "chat", chat_id: ctx.chat.id } }
 		)
 
-		await ctx.replyWithHTML(stripIndents`
-			${oneLine`
-				Hey, thanks for adding me to this group! 😊
-				I'm a AI bot that can offer empathy to the best of my abilities.
-				I want to explain a bit about how I work.
-			`}
-
-			${oneLine`
-				In a group, I have two modes of working. By default, I start in
-				"support mode", which means that when asked,
-				I will try to guess the feelings and needs of people in the group.
-				Although, as long as I'm not asked, I will stay silent.
-			`}
-
-			${oneLine`
-				If this group is a group for requesting empathy,
-				then you can let me know by typing /is_empathy_requesting_group.
-				Then I will switch to a different mode, where I will once in a while
-				remind people that I'm always available to offer empathy.
-				(You know, in case no one else is available.) And that you can just
-				<a href="tg://user?id=${ctx.botInfo.id}">message me privately</a>
-				and then I'll be there for you.
-			`}
-		`)
+		await introduceMyself(ctx)
 	}
 })
 
 bot.on(message("left_chat_member"), async ctx => {
-	if (ctx.chat.type === "supergroup") return
-
 	const { left_chat_member } = ctx.message
 	
 	if (left_chat_member.id !== ctx.botInfo.id) {
@@ -298,26 +296,26 @@ const handleGroupChat = async (ctx: Ctx /*, lastMessage: SubMessage */) => {
 			Or so that I can put you on the waiting list for a piggy bank.
 		`)
 
-	// if (!ctx.chatSession.storeMessages && reply) {
-	// 	let text = "text" in reply ? reply.text : ""
+	if (!ctx.chatSession.storeMessages && reply) {
+		let text = "text" in reply ? reply.text : ""
 
-	// 	if ("voice" in reply) {
-	// 		const { file_id } = reply.voice
-	// 		const fileLink = await ctx.telegram.getFileLink(file_id)
-	// 		text = await getTranscription(fileLink as URL)
-	// 	}
+		if ("voice" in reply) {
+			const { file_id } = reply.voice
+			const fileLink = await ctx.telegram.getFileLink(file_id)
+			text = await getTranscription(fileLink as URL)
+		}
 
-	// 	ctx.chatSession.resetMessages()
+		ctx.chatSession.resetMessages()
 
-	// 	ctx.chatSession.addMessage({
-	// 		type: "text" in reply ? "text" : "voice",
-	// 		user_id: reply.from!.id,
-	// 		message: text,
-	// 		date: new Date(reply.date).toString(),
-	// 	})
+		ctx.chatSession.addMessage({
+			type: "text" in reply ? "text" : "voice",
+			user_id: reply.from!.id,
+			message: text,
+			date: new Date(reply.date).toString(),
+		})
 
-	// 	ctx.chatSession.addMessage(lastMessage)
-	// }
+		ctx.chatSession.addMessage(lastMessage)
+	}
 
 	return await ctx.persistentChatAction(
 		"typing",
@@ -330,8 +328,6 @@ const handleGroupChat = async (ctx: Ctx /*, lastMessage: SubMessage */) => {
 }
 
 const handler = async (ctx: Ctx) => {
-	if (ctx.chat.type === "supergroup") return
-
 	const chatIsPrivate = ctx.chat.type === "private"
 
 	const { text } = ctx.message
