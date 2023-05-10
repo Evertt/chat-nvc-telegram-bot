@@ -19,10 +19,20 @@ export const assemblAIWebhook: (bot: Telegraf<MyContext>) => WebHook = bot => as
   const url = new URL(req.url!, DOMAIN)
   const updateId = parseInt(url.searchParams.get("update_id")!)
 
-  const pausedUpdate: undefined | [
+  let pausedUpdate: undefined | string | [
     transcriptionStart: number,
     update: Ctx["update"]
   ] = await supabaseStore.get(`paused-update:${updateId}`)
+
+  if (typeof pausedUpdate === "string") {
+    console.log("pausedUpdate is string", pausedUpdate)
+    pausedUpdate = JSON.parse(pausedUpdate) as [
+      transcriptionStart: number,
+      update: Ctx["update"]
+    ]
+  } else {
+    console.log("pausedUpdate is not string", typeof pausedUpdate)
+  }
 
   console.log(`paused-update:${updateId}`, pausedUpdate)
 
