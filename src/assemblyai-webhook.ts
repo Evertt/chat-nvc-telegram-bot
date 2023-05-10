@@ -32,6 +32,9 @@ export const assemblAIWebhook: (bot: Telegraf<MyContext>) => WebHook = bot => as
     console.error("No context found in cache for update", { updateId, ctxUpdate, transcriptionStart })
     await supabaseStore.delete(`paused-update:${updateId}`)
     return
+  } else {
+    console.log("ctxUpdate", typeof ctxUpdate, ctxUpdate)
+    console.log("transcriptionStart", typeof transcriptionStart, transcriptionStart)
   }
 
   try {
