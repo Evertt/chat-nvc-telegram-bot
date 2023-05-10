@@ -9,8 +9,8 @@ export { sessionVersions, type SceneSessionData } from "./versions/all.ts"
 const {
   SUPABASE_URL,
   SUPABASE_KEY,
-  SUPABASE_PREFIX = ""
 } = Deno.env.toObject()
+const SUPABASE_PREFIX = ""
 
 type LatestSessions = typeof latestSessions
 
@@ -80,6 +80,12 @@ export const supabaseStore: AsyncSessionStore<any> = {
     }
   },
 }
+
+const pausedUpdate = await supabaseStore.get("paused-update:532384950")
+const [transcriptionStart, ctxUpdate] = pausedUpdate ?? []
+
+console.log("transcriptionStart", transcriptionStart)
+console.log("ctxUpdate", ctxUpdate)
 
 const sessionKeyFactories: {
   [K in keyof LatestSessions]: (ctx: ContextWithMultiSession) => Promise<string | undefined> | string | undefined
