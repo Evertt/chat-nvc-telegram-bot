@@ -9,8 +9,8 @@ export { sessionVersions, type SceneSessionData } from "./versions/all.ts"
 const {
   SUPABASE_URL,
   SUPABASE_KEY,
+  SUPABASE_PREFIX = "",
 } = Deno.env.toObject()
-const SUPABASE_PREFIX = ""
 
 type LatestSessions = typeof latestSessions
 

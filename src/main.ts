@@ -110,17 +110,27 @@ bot.command("is_empathy_requesting_group", async ctx => {
 			Sorry, this command only works in a group chat.
 		`)
 	
-	ctx.chatSession.isEmpathyRequestGroup = true
-
 	bot.telegram.setMyCommands(
-    [{
+		[{
 			command: "is_not_empathy_requesting_group",
 			description: "Let me know that this is not an empathy requesting group (anymore).",
 		}],
-    { scope: { type: "chat", chat_id: ctx.chat.id } }
-  )
+		{ scope: { type: "chat", chat_id: ctx.chat.id } }
+	)
+	
+	if (ctx.chatSession.isEmpathyRequestGroup) {
+		if (Math.random() < 1/6)
+			await ctx.reply(oneLine`
+				Yes, I already know that this
+				is a group for requesting empathy. 🙂
+			`)
+		
+		return
+	}
 
-	return await ctx.reply(oneLine`
+	ctx.chatSession.isEmpathyRequestGroup = true
+
+	await ctx.reply(oneLine`
 		Okay, thanks for letting me know
 		that this group is for requesting empathy. 🙂
 	`)
@@ -132,19 +142,29 @@ bot.command("is_not_empathy_requesting_group", async ctx => {
 			Sorry, this command only works in a group chat.
 		`)
 
-	ctx.chatSession.isEmpathyRequestGroup = false
-
 	bot.telegram.setMyCommands(
-    [{
+		[{
 			command: "is_empathy_requesting_group",
 			description: "Let me know that this is an empathy requesting group.",
 		}],
-    { scope: { type: "chat", chat_id: ctx.chat.id } }
-  )
+		{ scope: { type: "chat", chat_id: ctx.chat.id } }
+	)
 
-	return await ctx.reply(oneLine`
+	if (!ctx.chatSession.isEmpathyRequestGroup) {
+		if (Math.random() < 1/6)
+			await ctx.replyWithHTML(oneLine`
+				Yes, I already know that this
+				is <i>not</i> a group for requesting empathy. 🙂
+			`)
+		
+		return
+	}
+
+	ctx.chatSession.isEmpathyRequestGroup = false
+
+	await ctx.replyWithHTML(oneLine`
 		Okay, thanks for letting me know
-		that this group is not an empathy requesting group (anymore). 🙂
+		that this group is <i>not</i> an empathy requesting group (anymore). 🙂
 	`)
 })
 
@@ -452,7 +472,7 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
   : undefined
 
 console.log("Starting bot...")
-bot.launch({ webhook, dropPendingUpdates: !webhook })
+bot.launch({ webhook, dropPendingUpdates: true })
 	.catch(error => {
 		console.error(error)
 		Deno.exit(1)

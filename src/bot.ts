@@ -17,7 +17,7 @@ bot.telegram.setMyCommands([
 	{ command: "help", description: "See some extra information" },
 	{ command: "settings", description: "View and change your settings" },
 	{ command: "role_play", description: "We can do a role play" },
-	{ command: "email", description: "Receive an email of our chat history" },
+	// { command: "email", description: "Receive an email of our chat history" },
 	{ command: "feedback", description: "You can give feedback to my developer about me" },
 	{ command: "buy_credits", description: "Buy more credits for yourself and / or others" },
 	{ command: "check_credits", description: "Check how many credits you have left" },
