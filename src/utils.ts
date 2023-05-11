@@ -367,6 +367,9 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = ctx.c
 	ctx.userSession.credits.used += completionResponse.usage?.total_tokens
 		?? ctx.userSession.credits.used + getTokens(assistantMessage?.content)
 
+	// TODO: I think this is causing an issue,
+	// because I see that people's used credits
+	// are not being counted correctly.
 	if (resetCreditsTo !== -1) {
 		ctx.userSession.credits.used = resetCreditsTo
 	}
