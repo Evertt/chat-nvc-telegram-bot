@@ -119,26 +119,48 @@ bot.command("is_empathy_requesting_group", async ctx => {
 	)
 	
 	if (ctx.chatSession.isEmpathyRequestGroup) {
-		const { first_name } = ctx.from
-		const { message_id } = ctx.message
+		if (Math.random() < 1/6) {
+			const { first_name } = ctx.from
+			const { message_id } = ctx.message
 
-		return await ctx.replyWithHTML(oneLine`
-			Hi ${first_name},
-			So this command was originally meant
-			to just let me know that this is a group
-			for requesting empathy. So that I know
-			I can, once in a while, remind people that I'm always available.
-			But since you're now using that command again,
-			I'm guessing that you think the command makes me do something else?
-			Like, maybe offering empathy to you right now?
-			If that's the case, I'd like to inform you that you can
-			indeed receive empathy from me.
-			<a href="tg://user?id=${ctx.botInfo.id}">
-				But only if you start a private conversation with me.
-			</a>
-		`, {
-			reply_to_message_id: message_id,
-		})
+			return await ctx.replyWithHTML(stripIndents`
+				Hi ${first_name},
+
+				${oneLine`
+					This command was originally meant
+					to just let me know that this is a group
+					for requesting empathy. So that I know
+					I can, once in a while, remind people that I'm always available.
+					Since it's been used before in this chat, I already know that now.
+				`}
+
+				${oneLine`
+					But since you're now using that command again,
+					I'm guessing that you just saw this command as a link in
+					someone else's message and were curious what it would do
+					if you clicked it. Is that correct?
+					Well clicking it automatically re-sends and re-fires the command.
+					So now you know. 🙂
+				`}
+
+				${oneLine`
+					But I'll also just use this opportunity to remind you and everybody else
+					that I'm a bot who can listen to you empathically.
+					<a href="tg://user?id=${ctx.botInfo.id}">
+						But only if you start a private conversation with me.
+					</a>
+				`}
+
+				${oneLine`
+					Okay, that's all. To anyone else reading this,
+					please stop clicking that command. 😅
+				`}
+			`, {
+				reply_to_message_id: message_id,
+			})
+		}
+
+		return
 	}
 
 	ctx.chatSession.isEmpathyRequestGroup = true
