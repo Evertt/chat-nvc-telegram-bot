@@ -284,7 +284,7 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = ctx.c
 	const { chatMessages } = await getMessagesFromLastCheckpoint(ctx)
 
 	let resetCreditsTo = -1
-	if (!ctx.chatSession.isEmpathyRequestGroup) {
+	if (ctx.chatSession.isEmpathyRequestGroup) {
 		resetCreditsTo = ctx.userSession.credits.used
 	}
 
@@ -362,14 +362,15 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = ctx.c
 	ctx.userSession.averageTokenErrorPerMessage = newAverageTokenErrorPerMessage
 	ctx.userSession.requests++
 
-	ctx.userSession.credits.used ||= completionResponse.usage?.prompt_tokens
+	ctx.userSession.credits.used = Math.max(
+		ctx.userSession.credits.used,
+		completionResponse.usage?.prompt_tokens
 		?? estimatedPromptTokenCount
+	)
+
 	ctx.userSession.credits.used += completionResponse.usage?.total_tokens
 		?? ctx.userSession.credits.used + getTokens(assistantMessage?.content)
 
-	// TODO: I think this is causing an issue,
-	// because I see that people's used credits
-	// are not being counted correctly.
 	if (resetCreditsTo !== -1) {
 		ctx.userSession.credits.used = resetCreditsTo
 	}
