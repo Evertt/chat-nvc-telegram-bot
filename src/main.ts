@@ -119,13 +119,26 @@ bot.command("is_empathy_requesting_group", async ctx => {
 	)
 	
 	if (ctx.chatSession.isEmpathyRequestGroup) {
-		if (Math.random() < 1/6)
-			await ctx.reply(oneLine`
-				Yes, I already know that this
-				is a group for requesting empathy. 🙂
-			`)
-		
-		return
+		const { first_name } = ctx.from
+		const { message_id } = ctx.message
+
+		return await ctx.replyWithHTML(oneLine`
+			Hi ${first_name},
+			So this command was originally meant
+			to just let me know that this is a group
+			for requesting empathy. So that I know
+			I can, once in a while, remind people that I'm always available.
+			But since you're now using that command again,
+			I'm guessing that you think the command makes me do something else?
+			Like, maybe offering empathy to you right now?
+			If that's the case, I'd like to inform you that you can
+			indeed receive empathy from me.
+			<a href="tg://user?id=${ctx.botInfo.id}">
+				But only if you start a private conversation with me.
+			</a>
+		`, {
+			reply_to_message_id: message_id,
+		})
 	}
 
 	ctx.chatSession.isEmpathyRequestGroup = true
