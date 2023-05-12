@@ -218,10 +218,13 @@ settingsScene.action(settingsMenuKeys, ctx => {
         Okay, so currently you <b>${value ? "will" : "will not"}</b> ${verb} ${subject}.
 
         Do you make it so that you <b>${value ? "will not" : "will"}</b> ${verb} ${subject}?
-      `, Markup.inlineKeyboard([
-      Markup.button.callback("Yes I do", `toggle_${key}`),
-      Markup.button.callback("No, send me back", "go_back")
-    ]))
+      `, {
+        parse_mode: "HTML",
+        ...Markup.inlineKeyboard([
+          Markup.button.callback("Yes I do", `toggle_${key}`),
+          Markup.button.callback("No, send me back", "go_back")
+        ])
+      })
 
   if (value === undefined) {
     if (Array.isArray(options)) {
