@@ -25,6 +25,7 @@ const {
   DOMAIN = "",
   PORT,
 	SUPABASE_PREFIX = "",
+	DEVELOPER_CHAT_ID,
 } = Deno.env.toObject()
 
 await (async () => {
@@ -105,63 +106,33 @@ bot.command("check_credits", async ctx => {
 })
 
 bot.command("is_empathy_requesting_group", async ctx => {
+	if (ctx.from.id !== +DEVELOPER_CHAT_ID) return
+
 	if (ctx.chat.type === "private")
 		return await ctx.reply(oneLine`
 			Sorry, this command only works in a group chat.
 		`)
+	
+	bot.telegram.deleteMyCommands(
+		{ scope: { type: "chat", chat_id: ctx.chat.id } }
+	)
 	
 	bot.telegram.setMyCommands(
 		[{
 			command: "is_not_empathy_requesting_group",
 			description: "Let me know that this is not an empathy requesting group (anymore).",
 		}],
-		{ scope: { type: "chat", chat_id: ctx.chat.id } }
+		{ scope: {
+			type: "chat_member",
+			chat_id: ctx.chat.id,
+			user_id: +DEVELOPER_CHAT_ID,
+		} }
 	)
 	
-	if (ctx.chatSession.isEmpathyRequestGroup) {
-		if (Math.random() < 1/6) {
-			const { first_name } = ctx.from
-			const { message_id } = ctx.message
-
-			return await ctx.replyWithHTML(stripIndents`
-				Hi ${first_name},
-
-				${oneLine`
-					This command was originally meant
-					to just let me know that this is a group
-					for requesting empathy. So that I know
-					I can, once in a while, remind people that I'm always available.
-					Since it's been used before in this chat, I already know that now.
-				`}
-
-				${oneLine`
-					But since you're now using that command again,
-					I'm guessing that you just saw this command as a link in
-					someone else's message and were curious what it would do
-					if you clicked it. Is that correct?
-					Well clicking it automatically re-sends and re-fires the command.
-					So now you know. 🙂
-				`}
-
-				${oneLine`
-					But I'll also just use this opportunity to remind you and everybody else
-					that I'm a bot who can listen to you empathically.
-					<a href="tg://user?id=${ctx.botInfo.id}">
-						But only if you start a private conversation with me.
-					</a>
-				`}
-
-				${oneLine`
-					Okay, that's all. To anyone else reading this,
-					please stop clicking that command. 😅
-				`}
-			`, {
-				reply_to_message_id: message_id,
-			})
-		}
-
-		return
-	}
+	if (ctx.chatSession.isEmpathyRequestGroup)
+		return await ctx.reply(oneLine`
+			Yes, I already know. 🙂
+		`)
 
 	ctx.chatSession.isEmpathyRequestGroup = true
 
@@ -172,17 +143,27 @@ bot.command("is_empathy_requesting_group", async ctx => {
 })
 
 bot.command("is_not_empathy_requesting_group", async ctx => {
+	if (ctx.from.id !== +DEVELOPER_CHAT_ID) return
+
 	if (ctx.chat.type === "private")
 		return await ctx.reply(oneLine`
 			Sorry, this command only works in a group chat.
 		`)
+
+	bot.telegram.deleteMyCommands(
+		{ scope: { type: "chat", chat_id: ctx.chat.id } }
+	)
 
 	bot.telegram.setMyCommands(
 		[{
 			command: "is_empathy_requesting_group",
 			description: "Let me know that this is an empathy requesting group.",
 		}],
-		{ scope: { type: "chat", chat_id: ctx.chat.id } }
+		{ scope: {
+			type: "chat_member",
+			chat_id: ctx.chat.id,
+			user_id: +DEVELOPER_CHAT_ID,
+		} }
 	)
 
 	if (!ctx.chatSession.isEmpathyRequestGroup) {
