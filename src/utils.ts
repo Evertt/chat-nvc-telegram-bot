@@ -72,7 +72,7 @@ export type FixedLengthArray<T, L extends number, TObj = [T, ...Array<T>]> =
 export const SYSTEM_USER_ID = 0
 export const SYSTEM_NAME = "System"
 
-const rolesMap = new Map([
+const rolesMap = new Map<number, "system" | "assistant">([
 	[SYSTEM_USER_ID, "system"],
 	[me.id, "assistant"]
 ])
@@ -218,18 +218,15 @@ export function convertToChatMessages(messages: Message[], excludeNames: boolean
 	const allNames = new Set(chatSession?.allMemberNames ?? [])
 
 	const chatMessages: MyChatCompletionRequestMessage[] = messages.map(msg => {
-		const { user_id: id } = msg
-		const name = chatSession?.getName(id)
-			?? namesMap.get(id)
-			?? `User ${id}`
+		const { user_id, message } = msg
+		const name = chatSession?.getName(user_id)
+			?? namesMap.get(user_id)
+			?? `User ${user_id}`
 
-		if (!rolesMap.has(id) && !/^User \d+$/.test(name))
-			allNames.add(name)
-
-		const role = (rolesMap.get(id) ?? "user") as "system" | "assistant" | "user"
+		const role = rolesMap.get(user_id) ?? "user"
 		const prefix = excludeNames || role !== "user" ? "" : `${name}: `
-		const content = `${prefix}${msg.message}`
-		const tokens = msg.tokens + getTokens(prefix) + 4
+		const content = `${prefix}${message}`
+		const tokens = getTokens(`\n\n${role}: ${content}\n`)
 
 		return { role, content, tokens }
 	})
@@ -245,7 +242,7 @@ export function convertToChatMessages(messages: Message[], excludeNames: boolean
 	chatMessages.unshift({
 		role: "system",
 		content: systemPrompt,
-		tokens: getTokens(systemPrompt) + 4,
+		tokens: getTokens(`\n\nsystem: ${systemPrompt}\n`),
 	})
 
 	return chatMessages

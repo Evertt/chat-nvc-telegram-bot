@@ -215,9 +215,9 @@ settingsScene.action(settingsMenuKeys, ctx => {
       settingsMessageId!,
       undefined,
       stripIndents`
-        Okay, so currently you <b>${value ? "will" : "will not"}</b> ${verb} ${subject}.
+        Okay, so currently you <b>${value ? "will" : "will not"}</b> be ${verb} ${subject}.
 
-        Do you make it so that you <b>${value ? "will not" : "will"}</b> ${verb} ${subject}?
+        Do you make it so that you <b>${value ? "will not" : "will"}</b> be ${verb} ${subject}?
       `, {
         parse_mode: "HTML",
         ...Markup.inlineKeyboard([
