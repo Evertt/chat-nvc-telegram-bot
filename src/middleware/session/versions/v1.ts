@@ -20,6 +20,11 @@ export type SubMessage = Modify<Message, {
 	tokens?: number
 }>
 
+export type NamedMessage = Modify<Message, {
+	user_id: never
+	name: string
+}>
+
 interface User {
 	id: number
 	username?: string
@@ -45,6 +50,17 @@ export class ChatSession implements NewSession {
 			.from(this.groupMembers.values())
 			// .filter(user => user.id !== me.id)
 			.map(user => user.first_name)
+	}
+
+	get messagesFromLastCheckpoint(): NamedMessage[] {
+		const checkpointIndex = this.messages
+			.findLastIndex(message => message.checkpoint)
+		return this.messages
+			.slice(Math.max(checkpointIndex, 0))
+			.map(message => ({
+				...message,
+				name: this.getName(message.user_id),
+			}))
 	}
 
 	constructor(ctx: Context) {

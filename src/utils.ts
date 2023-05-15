@@ -18,6 +18,7 @@ import { oneLine, oneLineCommaListsAnd } from "https://deno.land/x/deno_tags@1.8
 import { OPENAI_OVERLOADED_MESSAGE } from "./error-messages.ts"
 import { debug } from "https://deno.land/x/debug@0.2.0/mod.ts"
 import type { ParseMode } from "npm:typegram@4.3.0"
+import { SYSTEM_USER_ID, SYSTEM_NAME } from "./constants.ts"
 
 const log = debug("telegraf:utils")
 
@@ -68,9 +69,6 @@ export type FixedLengthArray<T, L extends number, TObj = [T, ...Array<T>]> =
     [ I : number ] : T
     [Symbol.iterator]: () => IterableIterator<T>   
   }
-
-export const SYSTEM_USER_ID = 0
-export const SYSTEM_NAME = "System"
 
 const rolesMap = new Map<number, "system" | "assistant">([
 	[SYSTEM_USER_ID, "system"],
