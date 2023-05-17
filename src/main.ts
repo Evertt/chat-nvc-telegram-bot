@@ -243,7 +243,7 @@ bot.on(message("new_chat_members"), async ctx => {
 			{ scope: { type: "chat", chat_id: ctx.chat.id } }
 		)
 
-		await introduceMyself(ctx)
+		// await introduceMyself(ctx)
 	}
 })
 
