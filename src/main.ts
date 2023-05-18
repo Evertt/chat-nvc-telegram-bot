@@ -423,13 +423,16 @@ bot.on(message("voice"), async ctx => {
 
 			There are two options available:
 			${oneLine`
-				- A very slow one, called Whisper,
-				that costs approximately the same as
+				- One called Whisper, which is fast for short messages,
+				but becomes slower for longer voice messages.
+				Oh and it costs approximately the same as
 				40 words of written text per 1 second of the audio.
 			`}
 			${oneLine`
-				- A less slow one, called Conformer-1,
-				that costs approximately the same as
+				- Another one called Conformer-1,
+				which is a little slower for short messages,
+				but becomes relatively faster for longer voice messages.
+				However, it costs approximately the same as
 				100 words of written text per 1 second of the audio.
 			`}
 
@@ -464,11 +467,6 @@ bot.on(message("voice"), async ctx => {
 	}
 
 	if (audioTranscriptionService === "Whisper") {
-		// This function is so very slow,
-		// because whisper can't process ogg files,
-		// which is what telegram uses for voice messages.
-		// So it first needs to convert the file to another format,
-		// and that is the bottleneck in this case.
 		const text = await getTranscription(fileLink as URL)
 
 		// @ts-expect-error trust me on this one...
