@@ -41,7 +41,7 @@ const makeNewChatQueue = () => {
   return queue
 }
 
-export const queueMiddleware = <C extends Context = Context>(update: C, next: ((ctx?: C) => Promise<any>)) => {
+export const queueMiddleware = async <C extends Context = Context>(update: C, next: ((ctx?: C) => Promise<any>)) => {
   if (!update.chat) return next()
 
   if (!queues.has(update.chat.id)) {
@@ -50,6 +50,16 @@ export const queueMiddleware = <C extends Context = Context>(update: C, next: ((
   }
 
   const chatQueue = queues.get(update.chat.id)!
-  chatQueue.push(next, update)
-  log("return immediately")
+  const job = chatQueue.push(next, update)
+
+  const isVoiceMessage = update.message
+    && "voice" in update.message
+    && !("text" in update.message)
+
+  if (isVoiceMessage) {
+    log("voice message detected, waiting for job to finish")
+    await job
+    log("voice message job finished")
+  }
+  else log("return immediately")
 }
