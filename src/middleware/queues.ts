@@ -4,6 +4,8 @@ import type { Chat, Update } from "npm:telegraf@4.12.3-canary.1/types"
 import { Queue } from "https://deno.land/x/queue@1.2.0/mod.ts"
 import type { Modify } from "../utils.ts"
 import { debug } from "https://deno.land/x/debug@0.2.0/mod.ts"
+import { delay } from "https://deno.land/std@0.184.0/async/delay.ts"
+import { oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 
 const log = debug("telegraf:queues")
 type ChatId = Chat["id"] // number
@@ -56,10 +58,21 @@ export const queueMiddleware = async <C extends Context = Context>(update: C, ne
     && "voice" in update.message
     && !("text" in update.message)
 
-  if (isVoiceMessage) {
-    log("voice message detected, waiting for job to finish")
-    await job
+  if (!isVoiceMessage) return log("return immediately")
+
+  log("voice message detected, waiting for job to finish")
+  
+  const timeout = delay(10_000).then(() => "timeout")
+  const whoWon = await Promise.race([job, timeout])
+
+  if (whoWon === "timeout") {
+    log(oneLine`
+      voice message job is taking too long,
+      so I need to return early to avoid
+      a webhook timeout error from Telegram.
+      But it will continue in the background, just slower.
+    `)
+  } else {
     log("voice message job finished")
   }
-  else log("return immediately")
 }
