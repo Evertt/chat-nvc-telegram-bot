@@ -312,6 +312,7 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 			`, false)
 
 			if (!/yes/i.test(answer)) return
+			if (Math.random() > .2) return
 
 			return await ctx.reply(oneLine`
 				Hey, if nobody else is available,
