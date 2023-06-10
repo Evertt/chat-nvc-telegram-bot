@@ -10,11 +10,10 @@ import { type Telegraf } from "npm:telegraf@4.12.3-canary.1"
 
 import { getTranscription } from "./audio-transcriber.ts"
 import {
-	askAssistant,
+askAssistant,
 	getAssistantResponse,
 	requestTranscript,
 	roundToSeconds,
-	getUserReference,
 } from "./utils.ts"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
@@ -300,7 +299,7 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 				and then I'm happy to listen.
 			`, { reply_to_message_id: ctx.message.message_id })
 
-		if (Math.random() < .99) {
+		if (Math.random() < .2) {
 			ctx.chatSession.resetMessages({
 				message: text,
 				user_id: ctx.from.id,
@@ -315,7 +314,7 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 			`, false)
 
 			if (!/yes/i.test(answer)) return
-			// if (Math.random() > .1) return
+			if (Math.random() > .1) return
 
 			const userName = getUserReference(ctx.from)
 			const supportOfferMessage = oneLine`
