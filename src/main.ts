@@ -305,6 +305,8 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 				user_id: ctx.from.id,
 			})
 
+			const copy = ctx.chatSession.messages.slice()
+
 			const answer = await askAssistant(ctx, oneLine`
 				Is the user asking for empathy / listening / support
 				in the previous message?
@@ -312,13 +314,25 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 			`, false)
 
 			if (!/yes/i.test(answer)) return
-			if (Math.random() > .2) return
+			if (Math.random() > .1) return
 
-			return await ctx.reply(oneLine`
-				Hey, if nobody else is available,
-				I'm always available to give empathy.
-				Just message me privately and I'm happy to listen.
-			`, { reply_to_message_id: ctx.message.message_id })
+			const userName = getUserReference(ctx.from)
+			const supportOfferMessage = oneLine`
+				Let ${userName} know that you would love to support her.
+				Maybe tell her that close to 50 percent of people have tried you already
+				and found you very helpful. Youd'd really just like to help.
+			`
+
+			ctx.chatSession.messages = copy
+			ctx.chatSession.addMessage({
+				message: supportOfferMessage,
+				user_id: 0,
+			})
+
+			return await ctx.reply(
+				supportOfferMessage,
+				{ reply_to_message_id: ctx.message.message_id }
+			)
 		}
 	}
 
