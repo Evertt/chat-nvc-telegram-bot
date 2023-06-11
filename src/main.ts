@@ -319,9 +319,11 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 
 			const userName = getUserReference(ctx.from)
 			const supportOfferMessage = oneLine`
-				Let ${userName} know that you would love to support her.
-				Maybe tell her that close to 50 percent of people have tried you already
+				Let ${userName} know that you would be happy to support her.
+				Maybe tell her that close to 50 people have tried you already
 				and found you very helpful. Youd'd really just like to help.
+				But try to sound natural, genuinely caring,
+				and not too much like you're promoting yourself.
 			`
 
 			ctx.chatSession.messages = copy
@@ -330,8 +332,14 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 				user_id: 0,
 			})
 
+			const message = await getAssistantResponse(ctx, false)
+			ctx.chatSession.addMessage({
+				message,
+				user_id: ctx.botInfo.id,
+			})
+
 			return await ctx.reply(
-				supportOfferMessage,
+				message,
 				{ reply_to_message_id: ctx.message.message_id }
 			)
 		}
