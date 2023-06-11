@@ -10,10 +10,11 @@ import { type Telegraf } from "npm:telegraf@4.12.3-canary.1"
 
 import { getTranscription } from "./audio-transcriber.ts"
 import {
-askAssistant,
+	askAssistant,
 	getAssistantResponse,
 	requestTranscript,
 	roundToSeconds,
+	getUserReference,
 } from "./utils.ts"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
