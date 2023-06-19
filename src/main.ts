@@ -320,7 +320,7 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 			const userName = getUserReference(ctx.from)
 			const supportOfferMessage = oneLine`
 				Let ${userName} know that you would be happy to support her.
-				Maybe tell her that close to 50 people have tried you already
+				Maybe tell them that close to 50 people have tried you already
 				and found you very helpful. Youd'd really just like to help.
 				But try to sound natural, genuinely caring,
 				and not too much like you're promoting yourself.
