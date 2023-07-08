@@ -7,7 +7,7 @@ import type {
 	CreateChatCompletionRequest,
 	CreateChatCompletionResponse,
 	ChatCompletionRequestMessage,
-} from "npm:openai@3.2.1"
+} from "npm:openai@3.3.0"
 import type { MyContext, ChatSession, Message } from "./context.ts"
 import { me } from "./me.ts"
 import { getTokens, MAX_PROMPT_TOKENS, MAX_TOKENS } from "./tokenizer.ts"

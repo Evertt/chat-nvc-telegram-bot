@@ -7,7 +7,7 @@ import type {
 	CreateChatCompletionRequest,
 	CreateChatCompletionResponse,
 	ChatCompletionRequestMessage,
-} from "npm:openai@3.2.1"
+} from "npm:openai@3.3.0"
 import { me } from "../me.ts"
 // import { makeSummaryMessage, needsNewCheckPoint } from "./common.ts"
 
