@@ -1,52 +1,97 @@
-import { NamedMessage as Message } from "../context.ts"
-import { SYSTEM_NAME, SUMMARY_PROMPT } from "../constants.ts"
+import { Message } from "../context.ts"
+import { SYSTEM_NAME, SUMMARY_PROMPT, BOT_NAME } from "../constants.ts"
 import { Assistant } from "./assistant.ts"
-import { encode } from "npm:gpt-3-encoder@1.1.4"
-import type {
-	CreateModerationResponse,
-	CreateChatCompletionRequest,
-	CreateChatCompletionResponse,
-	ChatCompletionRequestMessage,
-} from "npm:openai@3.3.0"
+// import type {
+// 	CreateModerationResponse,
+// 	CreateChatCompletionRequest,
+// 	CreateChatCompletionResponse,
+// 	ChatCompletionRequestMessage,
+// } from "npm:openai@3.3.0"
 import { me } from "../me.ts"
 // import { makeSummaryMessage, needsNewCheckPoint } from "./common.ts"
+// import tiktoken, { type TiktokenModel } from "npm:tiktoken@1.0.10"
+import tiktoken, { type Tiktoken, TiktokenModel } from "npm:tiktoken@1.0.10"
+import type {
+  CreateModerationResponse,
+	// CreateChatCompletionRequest,
+	ChatCompletionRequestMessage,
+} from "npm:openai@3.3.0"
+
+type ExtractGPT<T extends string> = T extends `gpt-${infer R}` ? `gpt-${R}` : never
+type GPTModel = ExtractGPT<TiktokenModel>
+
+class TokenCounter {
+  readonly model: GPTModel
+  readonly #tik: Tiktoken
+
+  constructor(model: GPTModel) {
+    this.model = model
+
+    this.#tik = tiktoken.encoding_for_model(model, {
+      "<|im_start|>": 100264,
+      "<|im_end|>": 100265,
+      "<|im_sep|>": 100266,
+    })
+  }
+
+  count(tokens?: string | Message[]): number {
+    return this.encode(tokens).length
+  }
+
+  encode(input?: string | Message[]): Uint32Array {
+    if (input == null) return new Uint32Array()
+
+    if (typeof input === "string")
+      return this.#tik.encode(input, "all", [])
+    
+    const chatMessages: ChatCompletionRequestMessage[] =
+      input.map(({ role, content, name }) =>
+        ({ role, content, name })
+      )
+
+    return this.encode(this.getChatGPTEncoding(chatMessages))
+  }
+
+  getChatGPTEncoding(
+    messages: ChatCompletionRequestMessage[],
+  ) {
+    const isGpt3 = this.model.startsWith("gpt-3.5");
+  
+    const msgSep = isGpt3 ? "\n" : "";
+    const roleSep = isGpt3 ? "\n" : "<|im_sep|>";
+  
+    return [
+      messages
+        .map(({ name = "", role, content = "" }) => {
+          if ([SYSTEM_NAME, me.first_name].includes(name)) name = ""
+
+          return `<|im_start|>${name || role}${roleSep}${content}<|im_end|>`;
+        })
+        .join(msgSep),
+      `<|im_start|>assistant${roleSep}`,
+    ].join(msgSep);
+  }
+}
 
 export class GPT_3_5 extends Assistant {
   readonly MAX_TOKENS = 4096
   readonly TOKENS_LEFT_FOR_SUMMARY = this.MAX_TOKENS / 8
 
-  readonly rolesMap = new Map<string, "system" | "assistant">([
-    [SYSTEM_NAME, "system"],
-    [me.first_name, "assistant"],
-  ])
+  readonly #tokenCounter: TokenCounter
 
   constructor(apiKey: string) {
     super(apiKey)
+    this.#tokenCounter = new TokenCounter("gpt-3.5-turbo")
   }
 
-  countTokens(input?: string): number {
-    return encode(input || "").length
+  countTokens(input?: string | Message[]): number {
+    return this.#tokenCounter.count(input)
   }
 
-  calcPromptTokens(messages: Message[]) {
-    const names = new Set(messages.map(message => message.name))
-    names.delete(me.first_name)
-    names.delete(SYSTEM_NAME)
-
-    const excludeNames = names.size < 2
-    return messages.map(msg => {
-      const { name, message } = msg
-      const isUser = names.has(name)
-      const role = this.rolesMap.get(name) || "user"
-      const prefix = excludeNames || !isUser ? "" : `${name}: `
-      const content = `${prefix}${message}`
-      return {
-        ...msg,
-        role,
-        content,
-        tokens: this.countTokens(`\n\n${role}: ${content}\n`),
-      }
-    })
+  getExtraTokensForChatMessage(message: Message) {
+    return [SYSTEM_NAME, BOT_NAME].includes(message.name)
+      ? 5 // By default, every message gets 5 tokens added, for the name and boundaries
+      : 4 + this.countTokens(message.name) // 4 tokens for the boundaries and then however many tokens the name is
   }
 
   async queryAssistant(messages: Message[], query: string) {
@@ -54,11 +99,7 @@ export class GPT_3_5 extends Assistant {
   }
 
   async getNextResponse(messages: Message[]): Promise<string> {
-    // const messagesCopy = [ ...messages ]
-    const promptMessages = this.calcPromptTokens(messages)
-    const lastMessages = this.needsNewCheckPoint({
-      messages, chatMessages: promptMessages
-    })
+    const lastMessages = this.needsNewCheckPoint(messages)
 
     if (lastMessages.length) {
       await this.addSummary(messages)

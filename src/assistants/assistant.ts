@@ -1,5 +1,5 @@
-import { NamedMessage as Message } from "../context.ts"
-import { SYSTEM_NAME, SUMMARY_PROMPT } from "../constants.ts"
+import { Message } from "../context.ts"
+import { SYSTEM_NAME, SUMMARY_PROMPT, MAKE_SUMMARY_MESSAGE } from "../constants.ts"
 
 type TokenCounter = (input?: string) => number
 
@@ -11,35 +11,40 @@ type CalcCheckPointArgs = {
 export abstract class Assistant {
   abstract readonly MAX_TOKENS: number
   abstract readonly TOKENS_LEFT_FOR_SUMMARY: number
+  abstract getExtraTokensForChatMessage(message: Message): number
+
   get MAX_PROMPT_TOKENS() {
     return this.MAX_TOKENS - this.TOKENS_LEFT_FOR_SUMMARY
   }
 
   private static makeSummaryMessage(tokenCounter: TokenCounter): Message {
     return {
+      role: "system",
       name: SYSTEM_NAME,
-      message: SUMMARY_PROMPT,
+      content: SUMMARY_PROMPT,
       type: "text",
-      get date() {
-        return Date()
-      },
+      date: Date(),
       tokens: tokenCounter(SUMMARY_PROMPT),
     }
   }
 
-  readonly SUMMARY_MESSAGE = Assistant.makeSummaryMessage(this.countTokens)
-  readonly SUMMARY_CHAT_MESSAGE = this.calcPromptTokens([this.SUMMARY_MESSAGE])[0]
+  readonly SUMMARY_MESSAGE = Assistant.makeSummaryMessage(this.countTokens.bind(this))
+  readonly SUMMARY_CHAT_MESSAGE = {
+    ...this.SUMMARY_MESSAGE,
+    tokens: this.SUMMARY_MESSAGE.tokens + this.getExtraTokensForChatMessage(this.SUMMARY_MESSAGE),
+  }
 
   constructor(protected apiKey: string) {}
 
-  abstract countTokens(input?: string): number
-  abstract calcPromptTokens(messages: Message[]): Message[]
-
+  abstract countTokens(input?: string | Message[]): number
   abstract getNextResponse(messages: Message[]): Promise<string>
   abstract queryAssistant(messages: Message[], query: string): Promise<string>
 
-  protected needsNewCheckPoint({ messages, chatMessages }: CalcCheckPointArgs) {
-    let tokenCount = chatMessages.reduce((sum, msg) => sum + msg.tokens, 0)
+  protected needsNewCheckPoint(messages: Message[]) {
+    let tokenCount = messages.reduce((sum, msg) =>
+      sum + msg.tokens + this.getExtraTokensForChatMessage(msg),
+      0
+    )
     if (tokenCount < this.MAX_PROMPT_TOKENS) return []
     tokenCount += this.SUMMARY_CHAT_MESSAGE.tokens
     const lastMessages: Message[] = []
@@ -47,9 +52,10 @@ export abstract class Assistant {
     while (tokenCount >= this.MAX_PROMPT_TOKENS && messages.length) {
       // I thought this should actually be .push() instead of .unshift()
       // but apparently .push() retults in lastMessages being in the reversed order.
-      lastMessages.unshift(messages.pop()!)
-      const deletedMessage = chatMessages.pop()
-      tokenCount -= deletedMessage!.tokens
+      const deletedMessage = messages.pop()!
+      lastMessages.unshift(deletedMessage)
+      tokenCount -= deletedMessage.tokens
+        + this.getExtraTokensForChatMessage(deletedMessage)
     }
     
     if (tokenCount >= this.MAX_PROMPT_TOKENS)
@@ -62,12 +68,11 @@ export abstract class Assistant {
     const summaryMessage = await this.queryAssistant(messages, SUMMARY_PROMPT)
   
     messages.push({
+      role: "system",
       name: SYSTEM_NAME,
-      message: summaryMessage,
+      content: summaryMessage,
       type: "text",
-      get date() {
-        return Date()
-      },
+      date: Date(),
       tokens: this.countTokens(summaryMessage),
       checkpoint: true,
     })

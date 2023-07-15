@@ -17,7 +17,7 @@ type Decrement<TupleT extends unknown[]> = Pop<TupleT>['length']
 
 type SubtractOne<N extends number> = Decrement<NumericTuple<N>> extends infer L
   ? L extends number ? L : never : never
-type WithVersion<Version extends number> =
+export type WithVersion<Version extends number> =
   { readonly version: Version }
 
 // type WithVersionClass<WV extends WithVersion<number>, UsesCtx extends boolean> =

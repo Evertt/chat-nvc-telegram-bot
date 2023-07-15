@@ -1,28 +1,23 @@
 import { getTokens } from "../../../tokenizer.ts"
 import type { NewSession } from "../new-session.ts"
 import { Scenes, type Context } from "npm:telegraf@4.12.3-canary.1"
-import { type Modify, SYSTEM_USER_ID, SYSTEM_NAME } from "../../../utils.ts"
+import { type Modify } from "../../../utils.ts"
+import { SYSTEM_USER_ID, SYSTEM_NAME } from "../../../constants.ts"
 import { me } from "../../../me.ts"
 
 export type Message = {
 	type: "text" | "voice"
 	user_id: number
-	message: string
+	message?: string
 	tokens: number
 	date: string
 	checkpoint?: boolean
 }
 
 export type SubMessage = Modify<Message, {
-	user_id?: number
 	date?: string
 	type?: "text" | "voice"
 	tokens?: number
-}>
-
-export type NamedMessage = Modify<Message, {
-	user_id: never
-	name: string
 }>
 
 interface User {
@@ -52,15 +47,11 @@ export class ChatSession implements NewSession {
 			.map(user => user.first_name)
 	}
 
-	get messagesFromLastCheckpoint(): NamedMessage[] {
+	get messagesFromLastCheckpoint(): Message[] {
 		const checkpointIndex = this.messages
 			.findLastIndex(message => message.checkpoint)
 		return this.messages
 			.slice(Math.max(checkpointIndex, 0))
-			.map(message => ({
-				...message,
-				name: this.getName(message.user_id),
-			}))
 	}
 
 	constructor(ctx: Context) {
@@ -149,7 +140,7 @@ export class UserChatSession implements NewSession {
 type DateStamp = string // ISO 8601
 type UserId = number
 
-export type Statitics = {
+export type Statistics = {
   activeUsers: Set<UserId>
   newUsers: Set<UserId>
   creditsUsed: Map<UserId, number>
@@ -158,7 +149,7 @@ export type Statitics = {
 export class StatisticsSession implements NewSession {
   version: 1 = 1
 
-  stats = new Map<DateStamp, Statitics>()
+  stats = new Map<DateStamp, Statistics>()
 
 	toJSON() {
 		return {

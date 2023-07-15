@@ -1,4 +1,4 @@
-import { NamedMessage as Message } from "../context.ts"
+import { Message } from "../context.ts"
 import { SYSTEM_NAME, SUMMARY_PROMPT } from "../constants.ts"
 import { Assistant } from "./assistant.ts"
 

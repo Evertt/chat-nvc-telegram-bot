@@ -1,5 +1,5 @@
+import { me } from "./me.ts"
 import { oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
-import { getTokens } from "./tokenizer.ts"
 import type { Message } from "./context.ts"
 
 export const BUY_CREDITS_SCENE_ID = "BUY_CREDITS" as const
@@ -10,6 +10,7 @@ export const SETTINGS_SCENE_ID = "SETTINGS" as const
 export const WELCOME_SCENE_ID = "WELCOME" as const
 export const SYSTEM_USER_ID = 0 as const
 export const SYSTEM_NAME = "System" as const
+export const BOT_NAME = me.first_name
 
 export const SUMMARY_PROMPT = oneLine`
 	Please summarize the observations, feelings, needs,
@@ -19,13 +20,29 @@ export const SUMMARY_PROMPT = oneLine`
 	you can include those too in the summary.
 `
 
-export const SUMMARY_MESSAGE: Message = {
-	user_id: SYSTEM_USER_ID,
-	message: SUMMARY_PROMPT,
+export const idRoleMap = new Map<number, "system" | "assistant">([
+  [SYSTEM_USER_ID, "system"],
+  [me.id, "assistant"],
+])
+
+export const nameRoleMap = new Map<string, "system" | "assistant">([
+  [SYSTEM_NAME, "system"],
+  [me.first_name, "assistant"],
+])
+
+type TokenCounter = (message?: string | Message[]) => number
+
+export const MAKE_SUMMARY_MESSAGE = (tokenCounter: TokenCounter): Message => ({
+  role: "system",
+	name: SYSTEM_NAME,
+	content: SUMMARY_PROMPT,
 	type: "text",
 	date: Date(),
-	tokens: getTokens(SUMMARY_PROMPT),
-}
+	get tokens() {
+    return tokenCounter([this])
+  },
+  checkpoint: true,
+})
 
 // These are all the currencies that are supported
 // by both Telegram and Stripe, which also

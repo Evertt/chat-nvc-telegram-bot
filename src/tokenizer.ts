@@ -1,6 +1,6 @@
 import { encode } from "npm:gpt-3-encoder@1.1.4"
 
-export function getTokens(input?: string): number {
+export function getTokens(input?: string | null): number {
 	return encode(input || "").length
 }
 

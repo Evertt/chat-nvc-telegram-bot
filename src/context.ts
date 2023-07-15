@@ -4,6 +4,5 @@ import type { ContextWithScene } from "./scenes/add-all-to-bot.ts"
 export type MyContext = ContextWithScene
 export type ChatSession = MyContext["chatSession"]
 export type Message = ChatSession["messages"][number]
-export type NamedMessage = ChatSession["messagesFromLastCheckpoint"][number]
 export type SubMessage = Parameters<ChatSession["addMessage"]>[0]
 export type GroupMembers = ChatSession["groupMembers"]
