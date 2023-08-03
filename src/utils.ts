@@ -285,17 +285,17 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = ctx.c
 		resetCreditsTo = ctx.userSession.credits.used
 	}
 
-	const moderationResult = await moderate(chatMessages.at(-1)!.content)
-	ctx.userSession.credits.used += chatMessages.at(-1)!.tokens
+	// const moderationResult = await moderate(chatMessages.at(-1)!.content)
+	// ctx.userSession.credits.used += chatMessages.at(-1)!.tokens
 	
-	if (moderationResult) {
-		ctx.chatSession.messages.pop()
+	// if (moderationResult) {
+	// 	ctx.chatSession.messages.pop()
 
-		throw oneLineCommaListsAnd`
-			Your message was flagged by OpenAI for ${moderationResult}.
-			Please try to rephrase your message. 🙏
-		`
-	}
+	// 	throw oneLineCommaListsAnd`
+	// 		Your message was flagged by OpenAI for ${moderationResult}.
+	// 		Please try to rephrase your message. 🙏
+	// 	`
+	// }
 
 	const estimatedPromptTokenCount = getTokenCount(chatMessages)
 	// log(`estimatedPromptTokenCount: ${estimatedPromptTokenCount}`)
