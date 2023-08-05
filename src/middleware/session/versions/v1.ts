@@ -81,7 +81,7 @@ export class ChatSession implements NewSession {
 			...message,
 			user_id: message.user_id ?? me.id,
 			type: message.type ?? "text",
-			tokens: message.tokens ?? getTokens(message.message),
+			tokens: message.tokens ?? (message.tokens = getTokens(message.message)),
 			date: message.date ?? Date(),
 		})
 	}

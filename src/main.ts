@@ -4,16 +4,17 @@ import { bot, setupStart } from "./bot.ts"
 import type { MyContext, SubMessage } from "./context.ts"
 import { me } from "./me.ts"
 import { supabaseStore, supabase, type AllMySessions } from "./middleware/session/session.ts"
-import { WELCOME_SCENE_ID } from "./constants.ts"
+import { SYSTEM_NAME, WELCOME_SCENE_ID } from "./constants.ts"
 
 import { type Telegraf } from "npm:telegraf@4.12.3-canary.1"
 
 import { getTranscription } from "./audio-transcriber.ts"
 import {
-askAssistant,
+	askAssistant,
 	getAssistantResponse,
 	requestTranscript,
 	roundToSeconds,
+	getUserReference,
 } from "./utils.ts"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
@@ -25,6 +26,7 @@ const {
   DOMAIN = "",
   PORT,
 	SUPABASE_PREFIX = "",
+	DEVELOPER_CHAT_ID,
 } = Deno.env.toObject()
 
 await (async () => {
@@ -105,63 +107,33 @@ bot.command("check_credits", async ctx => {
 })
 
 bot.command("is_empathy_requesting_group", async ctx => {
+	if (ctx.from.id !== +DEVELOPER_CHAT_ID) return
+
 	if (ctx.chat.type === "private")
 		return await ctx.reply(oneLine`
 			Sorry, this command only works in a group chat.
 		`)
+	
+	bot.telegram.deleteMyCommands(
+		{ scope: { type: "chat", chat_id: ctx.chat.id } }
+	)
 	
 	bot.telegram.setMyCommands(
 		[{
 			command: "is_not_empathy_requesting_group",
 			description: "Let me know that this is not an empathy requesting group (anymore).",
 		}],
-		{ scope: { type: "chat", chat_id: ctx.chat.id } }
+		{ scope: {
+			type: "chat_member",
+			chat_id: ctx.chat.id,
+			user_id: +DEVELOPER_CHAT_ID,
+		} }
 	)
 	
-	if (ctx.chatSession.isEmpathyRequestGroup) {
-		if (Math.random() < 1/6) {
-			const { first_name } = ctx.from
-			const { message_id } = ctx.message
-
-			return await ctx.replyWithHTML(stripIndents`
-				Hi ${first_name},
-
-				${oneLine`
-					This command was originally meant
-					to just let me know that this is a group
-					for requesting empathy. So that I know
-					I can, once in a while, remind people that I'm always available.
-					Since it's been used before in this chat, I already know that now.
-				`}
-
-				${oneLine`
-					But since you're now using that command again,
-					I'm guessing that you just saw this command as a link in
-					someone else's message and were curious what it would do
-					if you clicked it. Is that correct?
-					Well clicking it automatically re-sends and re-fires the command.
-					So now you know. 🙂
-				`}
-
-				${oneLine`
-					But I'll also just use this opportunity to remind you and everybody else
-					that I'm a bot who can listen to you empathically.
-					<a href="tg://user?id=${ctx.botInfo.id}">
-						But only if you start a private conversation with me.
-					</a>
-				`}
-
-				${oneLine`
-					Okay, that's all. To anyone else reading this,
-					please stop clicking that command. 😅
-				`}
-			`, {
-				reply_to_message_id: message_id,
-			})
-		}
-
-		return
-	}
+	if (ctx.chatSession.isEmpathyRequestGroup)
+		return await ctx.reply(oneLine`
+			Yes, I already know. 🙂
+		`)
 
 	ctx.chatSession.isEmpathyRequestGroup = true
 
@@ -172,17 +144,27 @@ bot.command("is_empathy_requesting_group", async ctx => {
 })
 
 bot.command("is_not_empathy_requesting_group", async ctx => {
+	if (ctx.from.id !== +DEVELOPER_CHAT_ID) return
+
 	if (ctx.chat.type === "private")
 		return await ctx.reply(oneLine`
 			Sorry, this command only works in a group chat.
 		`)
+
+	bot.telegram.deleteMyCommands(
+		{ scope: { type: "chat", chat_id: ctx.chat.id } }
+	)
 
 	bot.telegram.setMyCommands(
 		[{
 			command: "is_empathy_requesting_group",
 			description: "Let me know that this is an empathy requesting group.",
 		}],
-		{ scope: { type: "chat", chat_id: ctx.chat.id } }
+		{ scope: {
+			type: "chat_member",
+			chat_id: ctx.chat.id,
+			user_id: +DEVELOPER_CHAT_ID,
+		} }
 	)
 
 	if (!ctx.chatSession.isEmpathyRequestGroup) {
@@ -324,6 +306,8 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 				name: ctx.from.first_name,
 			})
 
+			const copy = ctx.chatSession.messages.slice()
+
 			const answer = await askAssistant(ctx, oneLine`
 				Is the user asking for empathy / listening / support
 				in the previous message?
@@ -331,12 +315,33 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 			`, false)
 
 			if (!/yes/i.test(answer)) return
+			if (Math.random() > .1) return
 
-			return await ctx.reply(oneLine`
-				Hey, if nobody else is available,
-				I'm always available to give empathy.
-				Just message me privately and I'm happy to listen.
-			`, { reply_to_message_id: ctx.message.message_id })
+			const userName = getUserReference(ctx.from)
+			const supportOfferMessage = oneLine`
+				Let ${userName} know that you would be happy to support her.
+				Maybe tell them that close to 50 people have tried you already
+				and found you very helpful. Youd'd really just like to help.
+				But try to sound natural, genuinely caring,
+				and not too much like you're promoting yourself.
+			`
+
+			ctx.chatSession.messages = copy
+			ctx.chatSession.addMessage({
+				content: supportOfferMessage,
+				name: SYSTEM_NAME,
+			})
+
+			const message = await getAssistantResponse(ctx, false)
+			ctx.chatSession.addMessage({
+				content: message,
+				name: ctx.botInfo.first_name,
+			})
+
+			return await ctx.reply(
+				message,
+				{ reply_to_message_id: ctx.message.message_id }
+			)
 		}
 	}
 
@@ -442,13 +447,16 @@ bot.on(message("voice"), async ctx => {
 
 			There are two options available:
 			${oneLine`
-				- A very slow one, called Whisper,
-				that costs approximately the same as
+				- One called Whisper, which is fast for short messages,
+				but becomes slower for longer voice messages.
+				Oh and it costs approximately the same as
 				40 words of written text per 1 second of the audio.
 			`}
 			${oneLine`
-				- A less slow one, called Conformer-1,
-				that costs approximately the same as
+				- Another one called Conformer-1,
+				which is a little slower for short messages,
+				but becomes relatively faster for longer voice messages.
+				However, it costs approximately the same as
 				100 words of written text per 1 second of the audio.
 			`}
 
@@ -483,11 +491,6 @@ bot.on(message("voice"), async ctx => {
 	}
 
 	if (audioTranscriptionService === "Whisper") {
-		// This function is so very slow,
-		// because whisper can't process ogg files,
-		// which is what telegram uses for voice messages.
-		// So it first needs to convert the file to another format,
-		// and that is the bottleneck in this case.
 		const text = await getTranscription(fileLink as URL)
 
 		// @ts-expect-error trust me on this one...

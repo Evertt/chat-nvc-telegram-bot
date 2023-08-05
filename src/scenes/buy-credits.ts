@@ -663,7 +663,7 @@ const createPurchaseInDb = async (ctx: MyContext, purchase: Purchase) => {
       : oneLine`
         ${attemptsToCreatePurchase < 2
           ? "Okay, you have received your credits. But u" : "U"
-        }nfortunately something went wrong with saving the invoice in our database.
+        }nfortunately something went wrong with donations in our database.
         It doesn't matter much for you, but it's important for us.
         Can you please click the button below to try again?
       `

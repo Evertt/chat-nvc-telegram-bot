@@ -62,7 +62,7 @@ const lookForPiggyBank = async (ctx: NewContext) => {
     .update({ given_to })
     .eq("id", piggyBank.id)
 
-  ctx.userSession.credits.received_from_gifts = piggyBank.credits
+  ctx.userSession.credits.received_from_gifts += piggyBank.credits
 
   const retailPrice = ctx.userSession
     .retailPriceForCredits(piggyBank.credits)
