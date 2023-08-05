@@ -5,6 +5,8 @@ import {
   sessionVersions,
 } from "../session/versions/all.ts"
 import type { ContextWithMultiSession } from "../session/session.ts"
+// @deno-types="npm:@types/lodash-es@4.17.6"
+import { uniqBy } from "npm:lodash-es@4.17.21"
 
 type SessionKey = keyof LatestSessions
 
@@ -46,11 +48,15 @@ export const migrate = <
     return session as Ctx[Key]
   }
 
-  const nextVersions = versions.slice(i + 1) // as unknown as NextSessions
+  const nextVersions = uniqBy(versions.slice(i + 1), "version") // as unknown as NextSessions
+
+  // console.log("nextVersions", nextVersions)
 
   return nextVersions.reduce((prevVersion, nextVersion) => {
     if (nextVersion.constructor.name  === "UserSession")
       console.log('"migrate" in nextVersion', "migrate" in nextVersion)
+
+    if (nextVersion.version === prevVersion.version) return prevVersion
     return "migrate" in nextVersion ? (nextVersion as any).migrate(prevVersion) : prevVersion
   }, session as any) as Ctx[Key]
 }

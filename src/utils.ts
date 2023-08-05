@@ -16,9 +16,9 @@ import { findLastIndex } from "npm:lodash-es@4.17.21"
 import { type IntroData, getSystemPrompt } from "./system-prompt.ts"
 import { oneLine, oneLineCommaListsAnd } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { OPENAI_OVERLOADED_MESSAGE } from "./error-messages.ts"
-import { debug } from "https://deno.land/x/debug@0.2.0/mod.ts"
 import type { ParseMode } from "npm:typegram@4.3.0"
 import { SYSTEM_USER_ID, SYSTEM_NAME } from "./constants.ts"
+import { debug } from "https://deno.land/x/debug@0.2.0/mod.ts"
 
 const log = debug("telegraf:utils")
 
@@ -70,14 +70,14 @@ export type FixedLengthArray<T, L extends number, TObj = [T, ...Array<T>]> =
     [Symbol.iterator]: () => IterableIterator<T>   
   }
 
-const rolesMap = new Map<number, "system" | "assistant">([
-	[SYSTEM_USER_ID, "system"],
-	[me.id, "assistant"]
+const rolesMap = new Map<string, "system" | "assistant">([
+	[SYSTEM_NAME, "system"],
+	[me.first_name, "assistant"]
 ])
 
 const namesMap = new Map([
-	[SYSTEM_USER_ID, SYSTEM_NAME],
-	[me.id, me.first_name]
+	[SYSTEM_NAME, SYSTEM_NAME],
+	[me.first_name, me.first_name]
 ])
 
 export const errorMessage = (error: any) => {
@@ -153,15 +153,18 @@ const SUMMARY_PROMPT = oneLine`
 `
 
 const SUMMARY_MESSAGE: Message = {
-	user_id: SYSTEM_USER_ID,
-	message: SUMMARY_PROMPT,
+	role: "system",
+	name: SYSTEM_NAME,
+	content: SUMMARY_PROMPT,
 	type: "text",
-	date: Date(),
+	get date() {
+		return Date()
+	},
 	tokens: getTokens(SUMMARY_PROMPT),
 }
 
 const SUMMARY_CHAT_MESSAGE = convertToChatMessages(
-	[SUMMARY_MESSAGE], true, "empathy"
+	[SUMMARY_MESSAGE], "empathy"
 )[1]
 
 export const summarize = async (ctx: MyContext) => {
@@ -188,7 +191,6 @@ export const getMessagesFromLastCheckpoint = async (ctx: MyContext): Promise<Mes
 	const { isEmpathyRequestGroup } = ctx.chatSession
 	let chatMessages = convertToChatMessages(
 		messagesFromLastCheckpoint,
-		chatIsPrivate,
 		chatIsPrivate ? "empathy" : isEmpathyRequestGroup ? "empathy_from_group" : "translation",
 		ctx.chatSession,
 	)
@@ -212,22 +214,10 @@ export const getMessagesFromLastCheckpoint = async (ctx: MyContext): Promise<Mes
 	return { messages: messagesFromLastCheckpoint, chatMessages }
 }
 
-export function convertToChatMessages(messages: Message[], excludeNames: boolean, request: IntroData["request"] = "translation", chatSession?: ChatSession) {
+export function convertToChatMessages(messages: Message[], request: IntroData["request"] = "translation", chatSession?: ChatSession) {
 	const allNames = new Set(chatSession?.allMemberNames ?? [])
 
-	const chatMessages: MyChatCompletionRequestMessage[] = messages.map(msg => {
-		const { user_id, message } = msg
-		const name = chatSession?.getName(user_id)
-			?? namesMap.get(user_id)
-			?? `User ${user_id}`
-
-		const role = rolesMap.get(user_id) ?? "user"
-		const prefix = excludeNames || role !== "user" ? "" : `${name}: `
-		const content = `${prefix}${message}`
-		const tokens = getTokens(`\n\n${role}: ${content}\n`)
-
-		return { role, content, tokens }
-	})
+	const chatMessages = [ ...messages ]
 
 	const systemPrompt = getSystemPrompt(
 		{
@@ -238,9 +228,14 @@ export function convertToChatMessages(messages: Message[], excludeNames: boolean
 	)
 
 	chatMessages.unshift({
+		type: "text",
 		role: "system",
+		name: SYSTEM_NAME,
 		content: systemPrompt,
-		tokens: getTokens(`\n\nsystem: ${systemPrompt}\n`),
+		get date() {
+			return Date()
+		},
+		tokens: getTokens(systemPrompt),
 	})
 
 	return chatMessages
@@ -283,7 +278,7 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = ctx.c
 		resetCreditsTo = ctx.userSession.credits.used
 	}
 
-	const moderationResult = await moderate(chatMessages.at(-1)!.content)
+	const moderationResult = await moderate(chatMessages.at(-1)!.content || "")
 	ctx.userSession.credits.used += chatMessages.at(-1)!.tokens
 	
 	if (moderationResult) {
@@ -382,7 +377,7 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = ctx.c
 		`
 	}
 
-	if (!assistantMessage) {
+	if (!assistantMessage || !assistantMessage.content) {
 		throw oneLine`
 			OpenAI returned an empty response.
 			I have no idea why. Maybe try again later?
@@ -395,7 +390,7 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = ctx.c
 	if (!saveInSession) ctx.chatSession.messages.pop()
 	else {
 		ctx.chatSession.addMessage({
-			message: content,
+			content,
 			tokens: completionResponse.usage?.completion_tokens,
 		})
 	}
@@ -405,8 +400,8 @@ export async function getAssistantResponse(ctx: MyContext, saveInSession = ctx.c
 
 export const askAssistant = async (ctx: MyContext, question: string, saveInSession = false) => {
 	ctx.chatSession.addMessage({
-		user_id: 0, // 0 = system
-		message: question,
+		name: SYSTEM_NAME, // 0 = system
+		content: question,
 	})
 
 	log(`Asking assistant: ${question}`)

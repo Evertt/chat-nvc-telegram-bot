@@ -7,7 +7,8 @@ type SummaryFactory = (tokenCounter: TokenCounter) => Message
 
 export const makeSummaryMessage: SummaryFactory = tokenCounter => ({
   name: SYSTEM_NAME,
-  message: SUMMARY_PROMPT,
+  role: "system",
+  content: SUMMARY_PROMPT,
   type: "text",
   get date() {
     return Date()

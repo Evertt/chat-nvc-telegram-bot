@@ -1,52 +1,46 @@
-import { Message } from "../context.ts"
-import { SYSTEM_NAME, SUMMARY_PROMPT, MAKE_SUMMARY_MESSAGE } from "../constants.ts"
+import type { MyContext, Message } from "../context.ts"
+import { SUMMARY_PROMPT, MAKE_SUMMARY_MESSAGE } from "../constants.ts"
 
-type TokenCounter = (input?: string) => number
-
-type CalcCheckPointArgs = {
-  messages: Message[]
-  chatMessages: Message[]
-}
+export const MARKUP = 1.5
 
 export abstract class Assistant {
   abstract readonly MAX_TOKENS: number
   abstract readonly TOKENS_LEFT_FOR_SUMMARY: number
-  abstract getExtraTokensForChatMessage(message: Message): number
+
+  abstract readonly wholesaleCostPerCredit: number
+  
+  get retailPricePerCredit() {
+    return this.wholesaleCostPerCredit * (1 + MARKUP)
+  }
+
+  wholesaleCostForCredits(tokens: number) {
+    return tokens * this.wholesaleCostPerCredit
+  }
+
+  retailPriceForCredits(tokens: number) {
+    return tokens * this.retailPricePerCredit
+  }
+
+  // abstract getExtraTokesForChatMessage(message: Message): number
 
   get MAX_PROMPT_TOKENS() {
     return this.MAX_TOKENS - this.TOKENS_LEFT_FOR_SUMMARY
   }
 
-  private static makeSummaryMessage(tokenCounter: TokenCounter): Message {
-    return {
-      role: "system",
-      name: SYSTEM_NAME,
-      content: SUMMARY_PROMPT,
-      type: "text",
-      date: Date(),
-      tokens: tokenCounter(SUMMARY_PROMPT),
-    }
-  }
-
-  readonly SUMMARY_MESSAGE = Assistant.makeSummaryMessage(this.countTokens.bind(this))
-  readonly SUMMARY_CHAT_MESSAGE = {
-    ...this.SUMMARY_MESSAGE,
-    tokens: this.SUMMARY_MESSAGE.tokens + this.getExtraTokensForChatMessage(this.SUMMARY_MESSAGE),
+  get SUMMARY_MESSAGE() {
+    return MAKE_SUMMARY_MESSAGE(this.countTokens.bind(this))
   }
 
   constructor(protected apiKey: string) {}
 
-  abstract countTokens(input?: string | Message[]): number
-  abstract getNextResponse(messages: Message[]): Promise<string>
-  abstract queryAssistant(messages: Message[], query: string): Promise<string>
+  abstract countTokens(input?: string | Message | Message[]): number
+  abstract getNextResponse(ctx: MyContext, saveInSession?: boolean, temperature?: number): Promise<string>
+  abstract queryAssistant(ctx: MyContext, question: string, saveInSession?: boolean): Promise<string>
 
   protected needsNewCheckPoint(messages: Message[]) {
-    let tokenCount = messages.reduce((sum, msg) =>
-      sum + msg.tokens + this.getExtraTokensForChatMessage(msg),
-      0
-    )
+    let tokenCount = this.countTokens(messages)
     if (tokenCount < this.MAX_PROMPT_TOKENS) return []
-    tokenCount += this.SUMMARY_CHAT_MESSAGE.tokens
+    tokenCount += this.countTokens(this.SUMMARY_MESSAGE)
     const lastMessages: Message[] = []
   
     while (tokenCount >= this.MAX_PROMPT_TOKENS && messages.length) {
@@ -54,8 +48,7 @@ export abstract class Assistant {
       // but apparently .push() retults in lastMessages being in the reversed order.
       const deletedMessage = messages.pop()!
       lastMessages.unshift(deletedMessage)
-      tokenCount -= deletedMessage.tokens
-        + this.getExtraTokensForChatMessage(deletedMessage)
+      tokenCount -= this.countTokens(deletedMessage)
     }
     
     if (tokenCount >= this.MAX_PROMPT_TOKENS)
@@ -64,17 +57,13 @@ export abstract class Assistant {
     return lastMessages
   }
 
-  protected async addSummary(messages: Message[]) {
-    const summaryMessage = await this.queryAssistant(messages, SUMMARY_PROMPT)
+  protected async summarize(ctx: MyContext) {
+    const summaryMessage = await this.queryAssistant(
+      ctx, SUMMARY_PROMPT, true
+    )
   
-    messages.push({
-      role: "system",
-      name: SYSTEM_NAME,
-      content: summaryMessage,
-      type: "text",
-      date: Date(),
-      tokens: this.countTokens(summaryMessage),
-      checkpoint: true,
-    })
+    ctx.chatSession.messages.at(-1)!.checkpoint = true
+  
+    return summaryMessage
   }
 }

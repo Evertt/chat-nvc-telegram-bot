@@ -13,11 +13,11 @@ export const SYSTEM_NAME = "System" as const
 export const BOT_NAME = me.first_name
 
 export const SUMMARY_PROMPT = oneLine`
-	Please summarize the observations, feelings, needs,
-	and possibly requests that the other person
-	(or people, if there were more than one) had in the conversation.
-	If there were any valuable insights in the conversation,
-	you can include those too in the summary.
+  Please summarize the observations, feelings, needs,
+  and possibly requests that the other person
+  (or people, if there were more than one) had in the conversation.
+  If there were any valuable insights in the conversation,
+  you can include those too in the summary.
 `
 
 export const idRoleMap = new Map<number, "system" | "assistant">([
@@ -30,17 +30,15 @@ export const nameRoleMap = new Map<string, "system" | "assistant">([
   [me.first_name, "assistant"],
 ])
 
-type TokenCounter = (message?: string | Message[]) => number
+type TokenCounter = (message?: string | Message | Message[]) => number
 
 export const MAKE_SUMMARY_MESSAGE = (tokenCounter: TokenCounter): Message => ({
   role: "system",
-	name: SYSTEM_NAME,
-	content: SUMMARY_PROMPT,
-	type: "text",
-	date: Date(),
-	get tokens() {
-    return tokenCounter([this])
-  },
+  name: SYSTEM_NAME,
+  content: SUMMARY_PROMPT,
+  type: "text",
+  date: Date(),
+  tokens: tokenCounter(SUMMARY_PROMPT),
   checkpoint: true,
 })
 

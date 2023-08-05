@@ -818,7 +818,7 @@ buyCreditsScene.leave(async ctx => {
     }`
 
     const lastMessage = ctx.chatSession.messages.at(-1)
-    if (lastMessage && lastMessage.user_id === ctx.from?.id) {
+    if (lastMessage && lastMessage.name === ctx.from?.first_name) {
       await ctx.reply(message, Markup.removeKeyboard())
       return await ctx.persistentChatAction(
         "typing",
@@ -830,7 +830,7 @@ buyCreditsScene.leave(async ctx => {
     }
 
     ctx.chatSession.addMessage({
-      message: message + " " + postfix,
+      content: message + " " + postfix,
     })
 
     return await ctx.reply(

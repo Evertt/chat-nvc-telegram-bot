@@ -14,6 +14,8 @@ import type {
   ChatCompletionRequestMessageRoleEnum,
 } from "npm:openai@3.3.0"
 import { me } from "../../../me.ts"
+import { SYSTEM_NAME } from "../../../constants.ts"
+import { MyContext } from "../../../context.ts"
 
 // 150% profit, minus the fees that Stripe
 // charges for every transaction,
@@ -123,6 +125,7 @@ export type Message = Modify<PrevMessage, {
 }>
 
 export type SubMessage = Modify<Message, {
+  name?: string
   role?: ChatCompletionRequestMessageRoleEnum,
 	date?: string
 	type?: "text" | "voice"
@@ -133,6 +136,7 @@ export type NewChatSession = Modify<PrevChatSession, {
   messages: Message[]
   readonly messagesFromLastCheckpoint: Message[]
   addMessage: (message: SubMessage) => void
+  resetMessages(message?: SubMessage): void
 } & NewSession<PrevChatSession>>
 
 type Class<T> = new (ctx: Context) => T
@@ -149,6 +153,11 @@ export class ChatSession extends mix<1, NewChatSession>(PrevChatSession) impleme
   readonly version: 2 = 2
   messages: Message[] = []
 
+  resetMessages = (message?: SubMessage) => {
+		this.messages = []
+		message && this.addMessage(message)
+	}
+
   get messagesFromLastCheckpoint(): Message[] {
 		const checkpointIndex = this.messages
 			.findLastIndex(message => message.checkpoint)
@@ -156,31 +165,59 @@ export class ChatSession extends mix<1, NewChatSession>(PrevChatSession) impleme
 		return this.messages.slice(Math.max(checkpointIndex, 0))
 	}
 
+  get allMemberNames() {
+		const names = new Set(
+      this.messages.map(msg => msg.name)
+    )
+
+    names.delete(me.first_name)
+    names.delete(SYSTEM_NAME)
+
+    return Array.from(names)
+	}
+
+  tokenCounter: (input?: string) => number
+
   constructor(ctx: Context) {
     super(ctx)
+    const assistant = (ctx as MyContext).userSession.assistant
+    this.tokenCounter = assistant.countTokens.bind(assistant)
   }
 
   addMessage = (message: SubMessage) => {
+    const name = message.name ?? me.first_name
+
 		this.messages.push({
 			...message,
-      role: message.role ?? "assistant",
-			name: message.name ?? me.first_name,
+      role: message.role ??
+        ({
+          [me.first_name]: "assistant",
+          [SYSTEM_NAME]: "system",
+        }[name]) ?? "user",
+			name: name,
 			type: message.type ?? "text",
-			tokens: message.tokens ?? 0,
 			date: message.date ?? Date(),
-		})
+      tokens: message.tokens ?? this.tokenCounter(message.content),
+		} as Message)
 	}
 
   migrate = (prevChatSession: PrevChatSession) => {
     this.messages = prevChatSession.messages.map(msg => {
       const { message, user_id, ...rest } = msg
 
+      const name = prevChatSession.getName(user_id)
+
+      const roles = {
+        [me.first_name]: "assistant",
+        [SYSTEM_NAME]: "system",
+      }
+
       return {
         ...rest,
-        role: "user",
+        role: roles[name] ?? "user",
         content: message ?? "",
         name: prevChatSession.getName(user_id),
-      }
+      } as Message
     })
 
     return this

@@ -71,7 +71,7 @@ export class ChatSession implements NewSession {
 		})
 	}
 
-	resetMessages(message?: SubMessage) {
+	resetMessages = (message?: SubMessage) => {
 		this.messages = []
 		message && this.addMessage(message)
 	}
@@ -90,7 +90,7 @@ export class ChatSession implements NewSession {
 		if (user_id === SYSTEM_USER_ID) return SYSTEM_NAME
 		if (user_id === me.id) return me.first_name
 		const user = this.groupMembers.get(user_id)
-		return user?.first_name ?? `User ${user_id}`
+		return user?.first_name ?? `User_${user_id}`
 	}
 
 	toJSON() {
@@ -164,15 +164,15 @@ export class StatisticsSession implements NewSession {
 }
 
 export type Sessions<Ctx extends Context = Context> = {
-	chatSession: (ctx: Ctx) => ChatSession
 	userSession: (ctx: Ctx) => UserSession
+	chatSession: (ctx: Ctx) => ChatSession
 	session: (ctx: Ctx) => UserChatSession
 	statistics: (ctx: Ctx) => StatisticsSession
 }
 
 export const sessions: Sessions = {
-	chatSession: (ctx) => new ChatSession(ctx),
 	userSession: () => new UserSession(),
+	chatSession: (ctx) => new ChatSession(ctx),
 	session: () => new UserChatSession(),
 	statistics: () => new StatisticsSession()
 }

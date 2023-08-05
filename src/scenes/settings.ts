@@ -79,7 +79,7 @@ const settingsMenu: Partial<SettingsMenu> = {
   },
   backendAssistant: {
     subject: "backend assistant",
-    options: ["ChatGPT", "Claude"],
+    options: ["ChatGPT", "GPT-4"],
     required: true,
   },
   donorName: {

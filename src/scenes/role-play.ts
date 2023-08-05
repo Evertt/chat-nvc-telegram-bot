@@ -94,9 +94,8 @@ rolePlayScene.enter(async ctx => {
   const yourReferral = referrals[other.type](other.value, "your")
   const myReferral = referrals[other.type](other.value, "my")
 
-  const user_id = ctx.from!.id
-  const message = "Can we do a role-play?"
-  ctx.chatSession.addMessage({ user_id, message })
+  const content = "Can we do a role-play?"
+  ctx.chatSession.addMessage({ name, content })
 
   const reply = myReferral === "?"
     ? oneLine`
@@ -134,7 +133,7 @@ rolePlayScene.enter(async ctx => {
       [Markup.button.callback("I'd like to see how you'd handle this", "see_example")],
     ]))
 
-  ctx.chatSession.addMessage({ message: reply })
+  ctx.chatSession.addMessage({ content: reply })
 
   bot.telegram.setMyCommands(
     [{ command: "stop", description: "End the current role-play." }],
@@ -256,5 +255,5 @@ rolePlayScene.leave(async ctx => {
 
   await ctx.reply(message)
 
-  ctx.chatSession.addMessage({ message })
+  ctx.chatSession.addMessage({ content: message })
 })

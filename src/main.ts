@@ -58,7 +58,7 @@ bot.start(async ctx => {
 
 	console.log("Resetting session to start with greeting.")
 
-	ctx.chatSession.resetMessages({ message: greeting })
+	ctx.chatSession.resetMessages({ content: greeting })
 
 	console.log("Sending greeting.")
 	await ctx.reply(greeting, { reply_markup: { remove_keyboard: true } })
@@ -290,7 +290,7 @@ bot.on(message("left_chat_member"), async ctx => {
 })
 
 const getReply = (ctx: MyContext) => {
-	return getAssistantResponse(ctx)
+	return ctx.userSession.assistant.getNextResponse(ctx)
 	.catch((errorResponse: string) => {
 		console.error("Error assistant response:", errorResponse)
 		return errorResponse
@@ -320,8 +320,8 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 
 		if (Math.random() < .2) {
 			ctx.chatSession.resetMessages({
-				message: text,
-				user_id: ctx.from.id,
+				content: text,
+				name: ctx.from.first_name,
 			})
 
 			const answer = await askAssistant(ctx, oneLine`
@@ -364,8 +364,8 @@ const handleGroupChat = async (ctx: Ctx, lastMessage: SubMessage) => {
 
 		ctx.chatSession.addMessage({
 			type: "text" in reply ? "text" : "voice",
-			user_id: reply.from!.id,
-			message: text,
+			name: reply.from!.first_name,
+			content: text,
 			date: new Date(reply.date).toString(),
 		})
 
@@ -389,8 +389,8 @@ const handler = async (ctx: Ctx) => {
 
 	const lastMessage: SubMessage = {
 		type: "voice" in ctx.message ? "voice" : "text",
-		user_id: ctx.from.id,
-		message: text,
+		name: ctx.from.first_name,
+		content: text,
 	}
 
 	if (ctx.chatSession.storeMessages) {

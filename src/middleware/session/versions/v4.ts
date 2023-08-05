@@ -10,6 +10,7 @@ import {
 } from "./v3.ts"
 export * from "./v3.ts"
 import { supportedCurrencies } from "../../../constants.ts"
+import { Assistant, GPT_3_5, GPT_4 } from "../../../assistants/index.ts"
 
 export type UserSettings = Modify<PrevUserSettings, {
   askForDonation: never
@@ -50,6 +51,7 @@ export type NewUserSession = Modify<PrevUserSession, {
   readonly retailPriceForCredits: (credits: number) => number
 
   settings: UserSettings
+  assistant: Assistant
 
   credits: CreditStats,
   hasAgreedToTerms: boolean,
@@ -102,7 +104,7 @@ export class UserSession implements NewUserSession {
   }
 
   get wholesaleCostPerCredit() {
-    return 1 / 5e5
+    return this.assistant.wholesaleCostPerCredit
   }
 
   get creditsPerSecond() {
@@ -116,7 +118,7 @@ export class UserSession implements NewUserSession {
   }
 
   get retailPricePerCredit() {
-    return this.wholesaleCostPerCredit * (1 + MARKUP)
+    return this.assistant.retailPricePerCredit
   }
 
   get canConverse() {
@@ -124,9 +126,13 @@ export class UserSession implements NewUserSession {
   }
 
   language_code: string
+  assistant: Assistant
 
   constructor(ctx: Context) {
     this.language_code = ctx.from?.language_code ?? "en"
+    this.assistant = this.settings.backendAssistant === "GPT-4"
+      ? new GPT_4()
+      : new GPT_3_5()
   }
 
   wholesaleCostForCredits(credits: number = this.credits.used) {
@@ -157,7 +163,18 @@ export class UserSession implements NewUserSession {
     // incrementing it
     this.requests = 0
 
+    this.assistant = this.settings.backendAssistant === "GPT-4"
+      ? new GPT_4()
+      : new GPT_3_5()
+
     return this
+  }
+
+  toJSON() {
+    return {
+      ...this,
+      assistant: undefined
+    }
   }
 
   restore() {
@@ -171,6 +188,10 @@ export class UserSession implements NewUserSession {
     this.credits.used = credits.used
     this.credits.purchased = credits.purchased
     this.credits.received_from_gifts = credits.received_from_gifts
+
+    this.assistant = this.settings.backendAssistant === "GPT-4"
+      ? new GPT_4()
+      : new GPT_3_5()
   }
 }
 

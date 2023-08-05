@@ -98,7 +98,7 @@ const lookForPiggyBank = async (ctx: NewContext) => {
 
   const lastMessage = ctx.chatSession.messages.at(-1)
 
-  if (!lastMessage || lastMessage.user_id !== ctx.from?.id) {
+  if (!lastMessage || lastMessage.name !== ctx.from?.first_name) {
     const message = oneLine`
       Hey ${ctx.from!.first_name},
       what's on your mind?
@@ -106,7 +106,7 @@ const lookForPiggyBank = async (ctx: NewContext) => {
 
     await ctx.reply(message)
 
-    ctx.chatSession.addMessage({ message })
+    ctx.chatSession.addMessage({ content: message })
   }
 
   ctx.scene.state.leavingIntentionally = true
@@ -376,7 +376,7 @@ welcomeScene.leave(async ctx => {
     if (!ctx.userSession.canConverse) return
 
     const lastMessage = ctx.chatSession.messages.at(-1)
-    if (lastMessage && lastMessage.user_id === ctx.from?.id) {
+    if (lastMessage && lastMessage.name === ctx.from?.first_name) {
       await ctx.sendChatAction("typing")
       const reply = await getAssistantResponse(ctx)
       await ctx.reply(reply)
