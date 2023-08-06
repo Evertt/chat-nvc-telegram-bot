@@ -108,7 +108,9 @@ export abstract class GPTAssistant extends Assistant {
     const messagesFromLastCheckpoint = messages.slice(Math.max(i, 0))
   
     const systemMessage = this.getSystemPrompt(ctx.chatSession)
-    messagesFromLastCheckpoint.unshift(systemMessage)
+    if (systemMessage.content.slice(0, 100) !== messagesFromLastCheckpoint[0]?.content.slice(0, 100)) {
+      messagesFromLastCheckpoint.unshift(systemMessage)
+    }
   
     const lastMessages = this.needsNewCheckPoint(messagesFromLastCheckpoint)
   
@@ -124,7 +126,7 @@ export abstract class GPTAssistant extends Assistant {
       return this.getMessagesFromLastCheckpoint(ctx)
     }
   
-    return messages
+    return messagesFromLastCheckpoint
   }
 
   async queryAssistant(ctx: MyContext, question: string, saveInSession = false) {

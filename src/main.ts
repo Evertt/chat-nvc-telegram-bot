@@ -1,5 +1,5 @@
 import "https://deno.land/std@0.179.0/dotenv/load.ts"
-
+import { Buffer } from "node:buffer"
 import { bot, setupStart } from "./bot.ts"
 import type { MyContext, SubMessage } from "./context.ts"
 import { me } from "./me.ts"
@@ -27,7 +27,37 @@ const {
   PORT,
 	SUPABASE_PREFIX = "",
 	DEVELOPER_CHAT_ID,
+  VOICE_ID,
+  ELEVENLABS_KEY,
 } = Deno.env.toObject()
+
+async function blobToBuffer(blob: Blob) {
+  // Convert Blob to ArrayBuffer, and then to Uint8Array
+  const arrayBuffer = await blob.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
+  
+  // Define the path to the temp file
+  const tempFilePath = await Deno.makeTempFile()
+
+  // Write Uint8Array to temp file
+  await Deno.writeFile(tempFilePath, uint8Array);
+
+  // Read the file as you have done in your previous example
+  const file = await Deno.open(tempFilePath, { read: true });
+  const fileInfo = await file.stat();
+  const fileData = new Uint8Array(fileInfo.size);
+  await file.read(fileData);
+  file.close();
+
+  // Optionally, delete the temp file after reading it
+  await Deno.remove(tempFilePath);
+  console.log("tempFilePath", tempFilePath)
+
+  // return tempFilePath
+
+  // Return the data as a Node.js Buffer
+  return Buffer.from(fileData);
+}
 
 await (async () => {
 	const { addMiddlewaresToBot } = await import("./middleware/add-all-to-bot.ts")
@@ -420,12 +450,57 @@ const handler = async (ctx: Ctx) => {
 		}
 	}
 
+  if (lastMessage.type === "voice") {
+    const reply = await getReply(ctx)
+    return await ctx.persistentChatAction(
+      "record_voice",
+      async () => {
+        const url = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`;
+
+        const headers = {
+          'Content-Type': 'application/json',
+          'xi-api-key': ELEVENLABS_KEY
+        }
+
+        const data = {
+          "text": reply,
+          "model_id": "eleven_english_v2",
+          "voice_settings": {
+            "style": 0.1,
+            "stability": 0.5,
+            "similarity_boost": 0.9,
+            "use_speaker_boost": true,
+            "optimize_streaming_latency": 0 // Set to 0 for highest quality ignoring latency
+          }
+        }
+
+        await fetch(url, {
+          method: "POST",
+          headers: headers,
+          body: JSON.stringify(data)
+        }).then(response => {
+          // Handle the response
+          if (!response.ok) {
+            throw new Error("HTTP error " + response.status);
+          }
+
+          return response.blob()
+        }).then(async data => {
+          // Work with the data
+          const buffer = await blobToBuffer(data)
+          await ctx.sendAudio({ source: buffer })
+        }).catch(error => {
+          console.log(error)
+          return ctx.reply(reply)
+        })
+      }
+    )
+  }
+
 	return await ctx.persistentChatAction(
 		"typing",
-		() => getReply(ctx)
-		.then(async reply => {
-			await ctx.reply(reply)
-		})
+    // @ts-ignore this
+		() => getReply(ctx).then(reply => ctx.reply(reply))
 	)
 }
 

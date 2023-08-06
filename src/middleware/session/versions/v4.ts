@@ -67,7 +67,7 @@ export class UserSession implements NewUserSession {
   averageTokenErrorPerMessage = 0
 
   settings: UserSettings = {
-		receiveVoiceTranscriptions: true,
+		receiveVoiceTranscriptions: false,
     backendAssistant: "ChatGPT",
     audioTranscriptionService: undefined,
 	}
