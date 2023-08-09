@@ -56,27 +56,38 @@ export const queueMiddleware = async <C extends CtxUpdateWithMeta = CtxUpdateWit
 
   const wasSentByProxy = !!ctx.update.meta?.sentByProxy
 
-  if (wasSentByProxy) await job
+  if (wasSentByProxy) return await job
 
-  const isVoiceMessage = ctx.message
-    && "voice" in ctx.message
-    && !("text" in ctx.message)
+  const { message } = ctx
 
-  if (!isVoiceMessage) return log("return immediately")
+  if (!message) return // no message, no need to await anything
 
-  log("voice message detected, waiting for job to finish")
+  const isTextMessage = "text" in message
+  const isVoiceMessage = "voice" in message
+
+  const timeoutMS = isTextMessage
+    ? 5_000
+    : isVoiceMessage
+      ? 10_000
+      : 100
+
+  if (timeoutMS >= 1000)
+    log(`waiting ${(timeoutMS / 1000).toFixed(0)} seconds`)
   
-  const timeout = delay(10_000).then(() => "timeout")
+  const timeout = delay(timeoutMS).then(() => "timeout")
   const whoWon = await Promise.race([job, timeout])
+
+  if (timeoutMS < 1000) return
 
   if (whoWon === "timeout") {
     log(oneLine`
-      voice message job is taking too long,
-      so I need to return early to avoid
-      a webhook timeout error from Telegram.
+      The job is taking too long,
+      so I'm returning early, partly to avoid
+      a webhook timeout error from Telegram,
+      and partly to save on CPU time / costs.
       But it will continue in the background, just slower.
     `)
   } else {
-    log("voice message job finished")
+    log("job finished")
   }
 }

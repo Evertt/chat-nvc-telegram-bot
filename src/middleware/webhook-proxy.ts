@@ -22,8 +22,12 @@ export type CtxUpdateWithMeta = Modify<Context, {
 
 export const webhookProxyMiddleware = <C extends CtxUpdateWithMeta = CtxUpdateWithMeta>(ctx: C, next: ((ctx?: C) => Promise<any>)) => {
   const isUsingWebhook = !!DOMAIN
+  const isVoiceMessage = ctx.message
+    && "voice" in ctx.message
+    && !("text" in ctx.message)
 
   if (!isUsingWebhook) return next()
+  if (!isVoiceMessage) return next()
   if (!ctx.chat) return next()
   if (!ctx.message) return next()
 
