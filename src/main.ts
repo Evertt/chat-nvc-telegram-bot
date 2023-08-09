@@ -409,7 +409,7 @@ const handler = async (ctx: Ctx) => {
 		return ctx.scene.enter(WELCOME_SCENE_ID)
 
 	if ("voice" in ctx.message) {
-		if (ctx.userSession.settings.receiveVoiceTranscriptions) {
+		if (text.length < 3000 && ctx.userSession.settings.receiveVoiceTranscriptions) {
 			await ctx.replyWithHTML(stripIndents`
 				Here's what I heard, you can check if I heard you correctly:
 
