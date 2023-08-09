@@ -9,7 +9,8 @@ export const setupStart = performance.now()
 
 console.log("Instantiating Telegraf bot...")
 export const bot = new Telegraf<MyContext>(TELEGRAM_KEY, {
-	telegram: { webhookReply: false }
+	telegram: { webhookReply: false },
+	handlerTimeout: 1000 * 60 * 5, // 5 minutes
 })
 
 bot.telegram.setMyCommands([
