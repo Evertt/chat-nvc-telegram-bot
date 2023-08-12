@@ -1,7 +1,5 @@
 import type { MyContext, Message } from "../context.ts"
-import { SUMMARY_PROMPT, MAKE_SUMMARY_MESSAGE } from "../constants.ts"
-
-export const MARKUP = 1.5
+import { SUMMARY_PROMPT, MAKE_SUMMARY_MESSAGE, MARKUP } from "../constants.ts"
 
 export abstract class Assistant {
   abstract readonly MAX_TOKENS: number

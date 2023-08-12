@@ -464,11 +464,11 @@ const handler = async (ctx: Ctx) => {
 
         const data = {
           "text": reply,
-          "model_id": "eleven_english_v2",
+          "model_id": "eleven_multilingual_v2",
           "voice_settings": {
-            "style": 0.1,
+            "style": 0.5,
             "stability": 0.5,
-            "similarity_boost": 0.9,
+            "similarity_boost": 0.8,
             "use_speaker_boost": true,
             "optimize_streaming_latency": 0 // Set to 0 for highest quality ignoring latency
           }

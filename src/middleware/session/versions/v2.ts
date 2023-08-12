@@ -14,16 +14,8 @@ import type {
   ChatCompletionRequestMessageRoleEnum,
 } from "npm:openai@3.3.0"
 import { me } from "../../../me.ts"
-import { SYSTEM_NAME } from "../../../constants.ts"
+import { SYSTEM_NAME, MARKUP } from "../../../constants.ts"
 import { MyContext } from "../../../context.ts"
-
-// 150% profit, minus the fees that Stripe
-// charges for every transaction,
-// which are actually quite a lot when
-// your transactions are of small amounts.
-// Also a MARKUP of 1.5 means that we get
-// a round number of credits per dollar.
-export const MARKUP = 1.5
 
 export type TokenStats = {
   used: number

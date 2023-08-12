@@ -8,8 +8,11 @@ import { debug, type Debug } from "https://deno.land/x/debug@0.2.0/mod.ts"
 import { OPENAI_OVERLOADED_MESSAGE } from "../error-messages.ts"
 import { oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 // @deno-types="npm:@types/lodash-es@4.17.6"
-import { findLastIndex } from "npm:lodash-es@4.17.21"
-import { getSystemPrompt } from "../system-prompt.ts";
+import { findLastIndex, memoize } from "npm:lodash-es@4.17.21"
+import { getSystemPrompt } from "../system-prompt.ts"
+import { slugify as ogSlugify } from "https://deno.land/x/slugify@0.3.0/mod.ts"
+
+const slugify = memoize(ogSlugify)
 
 const { OPENAI_KEY } = Deno.env.toObject()
 
@@ -178,7 +181,10 @@ export abstract class GPTAssistant extends Assistant {
       messages: messages.map(msg => ({
         role: msg.role,
         content: msg.content,
-        name: msg.name,
+        name: slugify(msg.name.slice(0, 64), {
+          replacement: "_",
+          remove: /[^a-zA-Z0-9 _-]/,
+        }) || undefined,
       })),
       max_tokens: this.MAX_TOKENS - estimatedPromptTokenCount,
     }

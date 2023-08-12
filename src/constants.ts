@@ -11,6 +11,7 @@ export const WELCOME_SCENE_ID = "WELCOME" as const
 export const SYSTEM_USER_ID = 0 as const
 export const SYSTEM_NAME = "System" as const
 export const BOT_NAME = me.first_name
+export const MARKUP = 1.5 as const
 
 export const SUMMARY_PROMPT = oneLine`
   Please summarize the observations, feelings, needs,

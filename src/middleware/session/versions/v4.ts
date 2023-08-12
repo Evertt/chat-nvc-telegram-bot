@@ -2,14 +2,13 @@ import { Modify } from "../../../utils.ts"
 import { type NewSession } from "../new-session.ts"
 import { type Context } from "npm:telegraf@4.12.3-canary.1"
 import {
-  MARKUP,
   UserSession as PrevUserSession,
   Sessions as PrevSessions,
   sessions as prevSessions,
   UserSettings as PrevUserSettings,
 } from "./v3.ts"
 export * from "./v3.ts"
-import { supportedCurrencies } from "../../../constants.ts"
+import { supportedCurrencies, MARKUP } from "../../../constants.ts"
 import { Assistant, GPT_3_5, GPT_4 } from "../../../assistants/index.ts"
 
 export type UserSettings = Modify<PrevUserSettings, {
@@ -118,11 +117,15 @@ export class UserSession implements NewUserSession {
   }
 
   get retailPricePerCredit() {
-    return this.assistant.retailPricePerCredit
+    return this.addMarkup(this.assistant.wholesaleCostPerCredit)
   }
 
   get canConverse() {
     return this.credits.available > 0
+  }
+
+  private addMarkup(cost: number, markup = MARKUP) {
+    return cost * (1 + markup)
   }
 
   language_code: string
