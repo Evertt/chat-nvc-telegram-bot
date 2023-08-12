@@ -64,19 +64,6 @@ type SettingsMenu = {
 }
 
 const settingsMenu: Partial<SettingsMenu> = {
-  audioTranscriptionService: {
-    subject: "voice messages",
-    verb: "able to use",
-    options: ["Whisper", "Conformer-1"],
-    required: false,
-  },
-  receiveVoiceTranscriptions: {
-    dependsOn: "audioTranscriptionService",
-    subject: "voice message transcriptions",
-    verb: "receiving",
-    options: "boolean",
-    required: true,
-  },
   backendAssistant: {
     subject: "backend assistant",
     options: ["ChatGPT", "GPT-4"],
@@ -172,11 +159,11 @@ settingsScene.enter(async ctx => {
   )
 })
 
-settingsScene.action(/^toggle_(.+)$/, ctx => {
-  const key = ctx.match[1] as ConditionalKeys<Settings, boolean>
-  const value = ctx.userSession.settings[key]
-  ctx.userSession.settings[key] = !value
-})
+// settingsScene.action(/^toggle_(.+)$/, ctx => {
+//   const key = ctx.match[1] as ConditionalKeys<Settings, boolean>
+//   const value = ctx.userSession.settings[key]
+//   ctx.userSession.settings[key] = !value
+// })
 
 settingsScene.action(/^set_(.+)_to_(.+)$/, ctx => {
   const [key, newValue] = ctx.match.slice(1) as [EnumKeys, EnumValues]
@@ -209,22 +196,22 @@ settingsScene.action(settingsMenuKeys, ctx => {
   const value = ctx.userSession.settings[key]
   const { settingsMessageId } = ctx.scene.state
 
-  if (options === "boolean")
-    return ctx.telegram.editMessageText(
-      ctx.chat!.id,
-      settingsMessageId!,
-      undefined,
-      stripIndents`
-        Okay, so currently you <b>${value ? "will" : "will not"}</b> be ${verb} ${subject}.
+  // if (options === "boolean")
+  //   return ctx.telegram.editMessageText(
+  //     ctx.chat!.id,
+  //     settingsMessageId!,
+  //     undefined,
+  //     stripIndents`
+  //       Okay, so currently you <b>${value ? "will" : "will not"}</b> be ${verb} ${subject}.
 
-        Do you make it so that you <b>${value ? "will not" : "will"}</b> be ${verb} ${subject}?
-      `, {
-        parse_mode: "HTML",
-        ...Markup.inlineKeyboard([
-          Markup.button.callback("Yes I do", `toggle_${key}`),
-          Markup.button.callback("No, send me back", "go_back")
-        ])
-      })
+  //       Do you make it so that you <b>${value ? "will not" : "will"}</b> be ${verb} ${subject}?
+  //     `, {
+  //       parse_mode: "HTML",
+  //       ...Markup.inlineKeyboard([
+  //         Markup.button.callback("Yes I do", `toggle_${key}`),
+  //         Markup.button.callback("No, send me back", "go_back")
+  //       ])
+  //     })
 
   if (value === undefined) {
     if (Array.isArray(options)) {

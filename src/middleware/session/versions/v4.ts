@@ -11,12 +11,21 @@ export * from "./v3.ts"
 import { supportedCurrencies, MARKUP } from "../../../constants.ts"
 import { Assistant, GPT_3_5, GPT_4 } from "../../../assistants/index.ts"
 
+export enum Voice {
+  FEMALE = "female",
+  MALE = "male",
+  NONE = "none",
+}
+
 export type UserSettings = Modify<PrevUserSettings, {
   askForDonation: never
+  receiveVoiceTranscriptions: never
   notifyOnShutdownDuringTesting: never
-  audioTranscriptionService?: "Whisper" | "Conformer-1"
+  audioTranscriptionService: never
+  // audioTranscriptionService?: "Whisper" | "Conformer-1"
   currency?: typeof supportedCurrencies[number]
   donorName?: string
+  voice: Voice
 }>
 
 export type CreditStats = {
@@ -66,9 +75,8 @@ export class UserSession implements NewUserSession {
   averageTokenErrorPerMessage = 0
 
   settings: UserSettings = {
-		receiveVoiceTranscriptions: false,
-    backendAssistant: "ChatGPT",
-    audioTranscriptionService: undefined,
+    backendAssistant: "GPT-4",
+    voice: Voice.NONE,
 	}
 
   get wholesaleCost() {
@@ -87,19 +95,24 @@ export class UserSession implements NewUserSession {
 
   requests = 0
 
+  // This is for the transcription service
   get wholesaleCostPerSecond() {
-    const { audioTranscriptionService } = this.settings
+    // const { audioTranscriptionService } = this.settings
 
-    if (audioTranscriptionService == null)
-      return 0
+    // if (audioTranscriptionService == null)
+    //   return 0
 
     const costPerSecondForAllServices = {
       "Whisper": 0.0001,
       "Conformer-1": 0.00025,
     } as const
 
-    return costPerSecondForAllServices
-      [audioTranscriptionService]
+    return costPerSecondForAllServices["Whisper"]
+  }
+
+  // This is for the text to speech service
+  get wholesaleCostPerCharacter() {
+    return 0.3 / 1000
   }
 
   get wholesaleCostPerCredit() {
@@ -112,8 +125,18 @@ export class UserSession implements NewUserSession {
     return (1 / this.wholesaleCostPerCredit) * this.wholesaleCostPerSecond
   }
 
+  get creditsPerCharacter() {
+    // calculate how many credits are equal to one character
+    // based on their respective wholesale costs
+    return (1 / this.wholesaleCostPerCredit) * this.wholesaleCostPerCharacter
+  }
+
   get retailPricePerSecond() {
-    return this.wholesaleCostPerSecond * (1 + MARKUP)
+    return this.addMarkup(this.wholesaleCostPerSecond)
+  }
+
+  get retailPricePerCharacter() {
+    return this.addMarkup(this.wholesaleCostPerCharacter)
   }
 
   get retailPricePerCredit() {
@@ -159,7 +182,8 @@ export class UserSession implements NewUserSession {
 
     // @ts-expect-error I know what I'm doing
     delete this.settings.askForDonation
-    this.settings.audioTranscriptionService = undefined
+    // @ts-expect-error I know what I'm doing
+    delete this.settings.audioTranscriptionService
 
     // resetting request count,
     // because I changed when I'm
@@ -195,6 +219,8 @@ export class UserSession implements NewUserSession {
     this.assistant = this.settings.backendAssistant === "GPT-4"
       ? new GPT_4()
       : new GPT_3_5()
+
+    this.settings.voice ??= Voice.NONE
   }
 }
 
