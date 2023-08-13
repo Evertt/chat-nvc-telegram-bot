@@ -18,7 +18,6 @@ import {
 } from "./utils.ts"
 import { oneLine, stripIndents } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import { message } from "npm:telegraf@4.12.3-canary.1/filters"
-import { assemblAIWebhook } from "./assemblyai-webhook.ts"
 import type { SetOptional } from "npm:type-fest@3.6.1"
 
 const {
@@ -580,7 +579,6 @@ const webhook: Telegraf.LaunchOptions["webhook"] = DOMAIN
       port: +PORT,
       hookPath: "/",
       secretToken: TELEGRAM_WEBBOOK_TOKEN,
-			cb: assemblAIWebhook(bot),
 		}
   : undefined
 
