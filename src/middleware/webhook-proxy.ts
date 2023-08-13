@@ -6,7 +6,7 @@ import { debug } from "https://deno.land/x/debug@0.2.0/mod.ts"
 import { oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 
 const {
-  TELEGRAM_WEBBOOK_TOKEN,
+  TELEGRAM_WEBHOOK_TOKEN,
   DOMAIN = "",
 } = Deno.env.toObject()
 
@@ -45,7 +45,7 @@ export const webhookProxyMiddleware = <C extends CtxUpdateWithMeta = CtxUpdateWi
   fetch(DOMAIN, {
     method: "POST",
     headers: {
-      "X-Telegram-Bot-Api-Secret-Token": TELEGRAM_WEBBOOK_TOKEN,
+      "X-Telegram-Bot-Api-Secret-Token": TELEGRAM_WEBHOOK_TOKEN,
     },
     body: JSON.stringify(update),
   })

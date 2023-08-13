@@ -1,17 +1,29 @@
+import "https://deno.land/std@0.179.0/dotenv/load.ts"
 import { me } from "./me.ts"
 import { oneLine } from "https://deno.land/x/deno_tags@1.8.2/tags.ts"
 import type { Message } from "./context.ts"
 
-export const BUY_CREDITS_SCENE_ID = "BUY_CREDITS" as const
-export const EMAIL_SCENE_ID = "EMAIL" as const
-export const FEEDBACK_SCENE_ID = "FEEDBACK" as const
-export const ROLE_PLAY_SCENE_ID = "ROLE_PLAY" as const
-export const SETTINGS_SCENE_ID = "SETTINGS" as const
-export const WELCOME_SCENE_ID = "WELCOME" as const
-export const SYSTEM_USER_ID = 0 as const
-export const SYSTEM_NAME = "System" as const
+export const {
+  TELEGRAM_WEBHOOK_TOKEN,
+  DOMAIN = "",
+  PORT,
+  SUPABASE_PREFIX = "",
+  DEVELOPER_CHAT_ID,
+  VOICE_ID,
+  ELEVENLABS_KEY,
+} = Deno.env.toObject()
+
+export const BUY_CREDITS_SCENE_ID = "BUY_CREDITS"
+export const EMAIL_SCENE_ID = "EMAIL"
+export const FEEDBACK_SCENE_ID = "FEEDBACK"
+export const ROLE_PLAY_SCENE_ID = "ROLE_PLAY"
+export const SETTINGS_SCENE_ID = "SETTINGS"
+export const WELCOME_SCENE_ID = "WELCOME"
+export const SYSTEM_USER_ID = 0
+export const SYSTEM_NAME = "System"
 export const BOT_NAME = me.first_name
-export const MARKUP = 1.5 as const
+export const MARKUP = 1.5
+export const CREDITS_PER_USD = 5e5
 
 export const SUMMARY_PROMPT = oneLine`
   Please summarize the observations, feelings, needs,

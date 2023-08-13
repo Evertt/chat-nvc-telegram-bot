@@ -467,3 +467,12 @@ export const fetchTranscript = async (transcriptId: string) => {
 }
 
 export const roundToSeconds = (time: number) => Math.round(time / 10) / 100
+
+export const logPerformance = async <T>(description: string, fn: (() => T) | (() => Promise<T>)) => {
+	const start = performance.now()
+	const result = await fn()
+	const end = performance.now()
+	console.log(`${description} in ${roundToSeconds(end - start)} seconds`)
+
+	return result
+}
